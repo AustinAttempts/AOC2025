@@ -1,9 +1,73 @@
 const std = @import("std");
 
+const STARTING_LOCK_VALUE: i32 = 50;
+
 pub fn main() !void {
-    std.debug.print("Hello, World!\n", .{});
+    const input = @embedFile("inputs/day01.txt");
+    std.debug.print("Part 1 Answer: {d}\n", .{try part1(input)});
+    std.debug.print("Part 2 Answer: {d}\n", .{try part2(input)});
 }
 
-test "always succeeds" {
-    try std.testing.expect(true);
+pub fn part1(input: []const u8) !i32 {
+    var code: i32 = 0;
+    var lock_value: i32 = STARTING_LOCK_VALUE;
+    var line = std.mem.splitScalar(u8, input, '\n');
+    while (line.next()) |item| {
+        const ticks = @mod(try std.fmt.parseInt(i32, item[1..], 10), 100);
+        switch (item[0]) {
+            'R' => lock_value += ticks,
+            'L' => lock_value -= ticks,
+            else => return error.InvalidDirection,
+        }
+
+        // Handle wrap-around
+        if (lock_value < 0) {
+            lock_value += 100;
+        } else if (lock_value >= 100) {
+            lock_value -= 100;
+        }
+
+        // Check for code match
+        if (lock_value == 0) {
+            code += 1;
+        }
+    }
+    return code;
+}
+
+pub fn part2(input: []const u8) !usize {
+    var code: usize = 0;
+    var lock_value: i32 = STARTING_LOCK_VALUE;
+    var line = std.mem.splitScalar(u8, input, '\n');
+    while (line.next()) |item| {
+        const ticks = try std.fmt.parseInt(usize, item[1..], 10);
+
+        for (0..ticks) |_| {
+            if (lock_value == 0) {
+                code += 1;
+            }
+            switch (item[0]) {
+                'R' => lock_value += 1,
+                'L' => lock_value -= 1,
+                else => return error.InvalidDirection,
+            }
+
+            if (lock_value < 0) {
+                lock_value += 100;
+            } else if (lock_value >= 100) {
+                lock_value -= 100;
+            }
+        }
+    }
+    return code;
+}
+
+test "part 1" {
+    const input = @embedFile("inputs/test_case.txt");
+    try std.testing.expectEqual(3, try part1(input));
+}
+
+test "part 2" {
+    const input = @embedFile("inputs/test_case.txt");
+    try std.testing.expectEqual(6, try part2(input));
 }
