@@ -11,10 +11,10 @@ pub fn main() !void {
 pub fn part1(input: []const u8) !i32 {
     var code: i32 = 0;
     var lock_value: i32 = STARTING_LOCK_VALUE;
-    var line = std.mem.splitScalar(u8, input, '\n');
-    while (line.next()) |item| {
-        const ticks = @mod(try std.fmt.parseInt(i32, item[1..], 10), 100);
-        switch (item[0]) {
+    var lines = std.mem.splitScalar(u8, input, '\n');
+    while (lines.next()) |line| {
+        const ticks = @mod(try std.fmt.parseInt(i32, line[1..], 10), 100);
+        switch (line[0]) {
             'R' => lock_value += ticks,
             'L' => lock_value -= ticks,
             else => return error.InvalidDirection,
@@ -38,15 +38,15 @@ pub fn part1(input: []const u8) !i32 {
 pub fn part2(input: []const u8) !usize {
     var code: usize = 0;
     var lock_value: i32 = STARTING_LOCK_VALUE;
-    var line = std.mem.splitScalar(u8, input, '\n');
-    while (line.next()) |item| {
-        const ticks = try std.fmt.parseInt(usize, item[1..], 10);
+    var lines = std.mem.splitScalar(u8, input, '\n');
+    while (lines.next()) |line| {
+        const ticks = try std.fmt.parseInt(usize, line[1..], 10);
 
         for (0..ticks) |_| {
             if (lock_value == 0) {
                 code += 1;
             }
-            switch (item[0]) {
+            switch (line[0]) {
                 'R' => lock_value += 1,
                 'L' => lock_value -= 1,
                 else => return error.InvalidDirection,
