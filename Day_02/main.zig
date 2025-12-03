@@ -2,8 +2,8 @@ const std = @import("std");
 
 pub fn main() !void {
     var timer = try std.time.Timer.start();
-
     const input = @embedFile("inputs/day02.txt");
+
     std.debug.print("Part 1 Answer: {d}\n", .{try part1(input)});
     std.debug.print("Part 2 Answer: {d}\n", .{try part2(input)});
 
@@ -14,6 +14,8 @@ pub fn main() !void {
 pub fn part1(input: []const u8) !usize {
     var bad_id_sum: usize = 0;
     var id_ranges = std.mem.splitScalar(u8, input, ',');
+    var buf: [32]u8 = undefined; // Attempt to remove allocations
+
     while (id_ranges.next()) |id_range| {
         var bounds = std.mem.splitScalar(u8, id_range, '-');
         const start_id = std.fmt.parseInt(usize, bounds.next().?, 10) catch |err| {
@@ -26,8 +28,7 @@ pub fn part1(input: []const u8) !usize {
         };
 
         for (start_id..end_id + 1) |id| {
-            const id_str = try std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{id});
-            defer std.heap.page_allocator.free(id_str);
+            const id_str = try std.fmt.bufPrint(&buf, "{d}", .{id});
             if (bad_id_part_1(id_str)) {
                 bad_id_sum += id;
             }
@@ -51,6 +52,8 @@ pub fn bad_id_part_1(id: []const u8) bool {
 pub fn part2(input: []const u8) !usize {
     var bad_id_sum: usize = 0;
     var id_ranges = std.mem.splitScalar(u8, input, ',');
+    var buf: [32]u8 = undefined; // Attempt to remove allocations
+
     while (id_ranges.next()) |id_range| {
         var bounds = std.mem.splitScalar(u8, id_range, '-');
         const start_id = std.fmt.parseInt(usize, bounds.next().?, 10) catch |err| {
@@ -63,8 +66,7 @@ pub fn part2(input: []const u8) !usize {
         };
 
         for (start_id..end_id + 1) |id| {
-            const id_str = try std.fmt.allocPrint(std.heap.page_allocator, "{d}", .{id});
-            defer std.heap.page_allocator.free(id_str);
+            const id_str = try std.fmt.bufPrint(&buf, "{d}", .{id});
             if (bad_id_part_2(id_str)) {
                 bad_id_sum += id;
             }
@@ -79,33 +81,20 @@ pub fn bad_id_part_2(id: []const u8) bool {
     for (1..(len / 2) + 1) |i| {
         if (len % i == 0) {
             const substr = id[0..i];
-            const repeated_str = repeat_str(substr, len / i) catch |err| {
-                std.debug.print("Error repeating string: {}\n", .{err});
-                return false;
-            };
-            defer std.heap.page_allocator.free(repeated_str);
-            if (std.mem.eql(u8, repeated_str, id)) {
-                return true;
+            var is_repeated = true;
+
+            var j: usize = i;
+            while (j < len) : (j += i) {
+                if (!std.mem.eql(u8, substr, id[j .. j + i])) {
+                    is_repeated = false;
+                    break;
+                }
             }
+
+            if (is_repeated) return true;
         }
     }
     return false;
-}
-
-pub fn repeat_str(str: []const u8, n: usize) ![]u8 {
-    const total_len = str.len * n;
-    var result = std.heap.page_allocator.alloc(u8, total_len) catch |err| {
-        std.debug.print("Error allocating memory: {}\n", .{err});
-        return err;
-    };
-
-    var i: usize = 0;
-    while (i < n) : (i += 1) {
-        const start = i * str.len;
-        @memcpy(result[start..][0..str.len], str);
-    }
-
-    return result;
 }
 
 test "Part 1 bad ID detection" {
@@ -117,14 +106,8 @@ test "Part 1 bad ID detection" {
 
 test "part 1" {
     const input = @embedFile("inputs/test_case.txt");
-    try std.testing.expectEqual(1227775554, try part1(input));
-}
 
-test "repeat string" {
-    const s = "abc";
-    const repeated = try repeat_str(s, 3);
-    try std.testing.expect(std.mem.eql(u8, repeated, "abcabcabc"));
-    std.heap.page_allocator.free(repeated);
+    try std.testing.expectEqual(1227775554, try part1(input));
 }
 
 test "Part 2 bad ID detection" {
