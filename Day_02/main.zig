@@ -1,9 +1,14 @@
 const std = @import("std");
 
 pub fn main() !void {
+    var timer = try std.time.Timer.start();
+
     const input = @embedFile("inputs/day02.txt");
     std.debug.print("Part 1 Answer: {d}\n", .{try part1(input)});
     std.debug.print("Part 2 Answer: {d}\n", .{try part2(input)});
+
+    const elapsed = timer.read();
+    std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
 }
 
 pub fn part1(input: []const u8) !usize {
