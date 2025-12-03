@@ -34,7 +34,6 @@ pub fn part1(input: []const u8) !usize {
 
 pub fn bad_id_part_1(id: []const u8) bool {
     const len = id.len;
-
     const first_half = id[0 .. len / 2];
     const second_half = id[len / 2 .. len];
     if (std.mem.eql(u8, first_half, second_half)) {
@@ -71,8 +70,37 @@ pub fn part2(input: []const u8) !usize {
 }
 
 pub fn bad_id_part_2(id: []const u8) bool {
-    //TODO: Implement part 2 bad ID detection
+    const len = id.len;
+    for (1..(len / 2) + 1) |i| {
+        if (len % i == 0) {
+            const substr = id[0..i];
+            const repeated_str = repeat_str(substr, len / i) catch |err| {
+                std.debug.print("Error repeating string: {}\n", .{err});
+                return false;
+            };
+            defer std.heap.page_allocator.free(repeated_str);
+            if (std.mem.eql(u8, repeated_str, id)) {
+                return true;
+            }
+        }
+    }
     return false;
+}
+
+pub fn repeat_str(str: []const u8, n: usize) ![]u8 {
+    const total_len = str.len * n;
+    var result = std.heap.page_allocator.alloc(u8, total_len) catch |err| {
+        std.debug.print("Error allocating memory: {}\n", .{err});
+        return err;
+    };
+
+    var i: usize = 0;
+    while (i < n) : (i += 1) {
+        const start = i * str.len;
+        @memcpy(result[start..][0..str.len], str);
+    }
+
+    return result;
 }
 
 test "Part 1 bad ID detection" {
@@ -87,6 +115,13 @@ test "part 1" {
     try std.testing.expectEqual(1227775554, try part1(input));
 }
 
+test "repeat string" {
+    const s = "abc";
+    const repeated = try repeat_str(s, 3);
+    try std.testing.expect(std.mem.eql(u8, repeated, "abcabcabc"));
+    std.heap.page_allocator.free(repeated);
+}
+
 test "Part 2 bad ID detection" {
     try std.testing.expect(bad_id_part_2("12341234"));
     try std.testing.expect(bad_id_part_2("123123123"));
@@ -96,9 +131,10 @@ test "Part 2 bad ID detection" {
     try std.testing.expect(bad_id_part_2("6464"));
     try std.testing.expect(bad_id_part_2("123123"));
     try std.testing.expect(!bad_id_part_2("101"));
+    try std.testing.expect(!bad_id_part_2("5"));
 }
 
 test "part 2" {
     const input = @embedFile("inputs/test_case.txt");
-    try std.testing.expectEqual(1227775554, try part1(input));
+    try std.testing.expectEqual(4174379265, try part2(input));
 }
