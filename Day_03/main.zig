@@ -9,6 +9,7 @@ pub fn main() !void {
 
     const input = @embedFile("inputs/day03.txt");
     std.debug.print("Part 1 Answer: {d}\n", .{try part1(allocator, input)});
+    std.debug.print("Part 2 Answer: {d}\n", .{try part2(allocator, input)});
 
     const elapsed = timer.read();
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
@@ -30,6 +31,26 @@ pub fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
     return joltage_sum;
 }
 
+pub fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
+    var joltage_sum: usize = 0;
+    const JOLTAGE_LENGTH = 12;
+    var lines = std.mem.splitScalar(u8, input, '\n');
+    while (lines.next()) |bank| {
+        var joltage_str = try allocator.alloc(u8, JOLTAGE_LENGTH);
+        defer allocator.free(joltage_str);
+
+        var prev_index: usize = 0;
+        for (0..JOLTAGE_LENGTH) |i| {
+            const value = std.mem.indexOfMax(u8, bank[prev_index .. bank.len - (JOLTAGE_LENGTH - i - 1)]);
+            joltage_str[i] = bank[value + prev_index];
+            prev_index += value + 1;
+        }
+        const joltage = try std.fmt.parseInt(usize, joltage_str, 10);
+        joltage_sum += joltage;
+    }
+    return joltage_sum;
+}
+
 test "part 1" {
     const input = @embedFile("inputs/test_case.txt");
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -37,4 +58,13 @@ test "part 1" {
     const allocator = gpa.allocator();
 
     try std.testing.expectEqual(357, try part1(allocator, input));
+}
+
+test "part 2" {
+    const input = @embedFile("inputs/test_case.txt");
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    try std.testing.expectEqual(3121910778619, try part2(allocator, input));
 }
