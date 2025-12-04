@@ -32,6 +32,7 @@ pub fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
     defer map.deinit();
 
     const max_size = try mapBuilder(&map, input);
+    printMap(&map, max_size);
 
     return removeRoll(&map, max_size);
 }
@@ -53,6 +54,15 @@ pub fn mapBuilder(map: *std.ArrayHashMap(Coord, u8, std.array_hash_map.AutoConte
         max_size.y = current_pos.y;
     }
     return max_size;
+}
+
+pub fn printMap(map: *std.ArrayHashMap(Coord, u8, std.array_hash_map.AutoContext(Coord), true), max_size: Coord) void {
+    for (0..max_size.y) |y| {
+        for (0..max_size.x) |x| {
+            std.debug.print("{c}", .{map.get(.{ .x = x, .y = y }) orelse '?'});
+        }
+        std.debug.print("\n", .{});
+    }
 }
 
 pub fn removeRoll(map: *std.ArrayHashMap(Coord, u8, std.array_hash_map.AutoContext(Coord), true), max_size: Coord) !usize {
@@ -78,11 +88,8 @@ pub fn removeRoll(map: *std.ArrayHashMap(Coord, u8, std.array_hash_map.AutoConte
                     valid_rolls += 1;
                 }
             }
-            std.debug.print("{c}", .{map.get(.{ .x = x, .y = y }) orelse '?'});
         }
-        std.debug.print("\n", .{});
     }
-
     return valid_rolls;
 }
 
