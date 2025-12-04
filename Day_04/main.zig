@@ -22,6 +22,7 @@ pub fn main() !void {
 
     const input = @embedFile("inputs/day04.txt");
     std.debug.print("Part 1 Answer: {d}\n", .{try part1(allocator, input)});
+    std.debug.print("Part 2 Answer: {d}\n", .{try part2(allocator, input)});
 
     const elapsed = timer.read();
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
@@ -68,10 +69,19 @@ pub fn printMap(map: *std.ArrayHashMap(Coord, u8, std.array_hash_map.AutoContext
 pub fn removeRoll(map: *std.ArrayHashMap(Coord, u8, std.array_hash_map.AutoContext(Coord), true), max_size: Coord) !usize {
     var valid_rolls: usize = 0;
 
+    // First pass: clear all X marks to .
+    for (0..max_size.y) |y| {
+        for (0..max_size.x) |x| {
+            if ((map.get(.{ .x = x, .y = y }) orelse '?') == 'X') {
+                try map.put(.{ .x = x, .y = y }, '.');
+            }
+        }
+    }
+
     for (0..max_size.y) |y| {
         for (0..max_size.x) |x| {
             var roll_cnt: usize = 0;
-            if ((map.get(.{ .x = x, .y = y }) orelse '?') != '.') {
+            if ((map.get(.{ .x = x, .y = y }) orelse '?') == '@') {
                 for (DIRECTIONS) |dir| {
                     const nx = @as(i32, @intCast(x)) + dir[0];
                     const ny = @as(i32, @intCast(y)) + dir[1];
@@ -91,6 +101,26 @@ pub fn removeRoll(map: *std.ArrayHashMap(Coord, u8, std.array_hash_map.AutoConte
         }
     }
     return valid_rolls;
+}
+
+pub fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
+    var map = std.ArrayHashMap(Coord, u8, std.array_hash_map.AutoContext(Coord), true).init(allocator);
+    defer map.deinit();
+
+    const max_size = try mapBuilder(&map, input);
+    printMap(&map, max_size);
+    std.debug.print("Starting removal process...\n", .{});
+
+    var total_rolls_removed: usize = 0;
+    while (true) {
+        const rolls_removed = try removeRoll(&map, max_size);
+        printMap(&map, max_size);
+        std.debug.print("Rolls removed this pass: {d}\n", .{rolls_removed});
+        if (rolls_removed == 0) break;
+        total_rolls_removed += rolls_removed;
+    }
+
+    return total_rolls_removed;
 }
 
 test "part 1" {
@@ -114,4 +144,13 @@ test "map builder" {
     const max_size = try mapBuilder(&map, input);
     try std.testing.expectEqual(10, max_size.x);
     try std.testing.expectEqual(10, max_size.y);
+}
+
+test "part 2" {
+    const input = @embedFile("inputs/test_case.txt");
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    try std.testing.expectEqual(43, try part2(allocator, input));
 }
