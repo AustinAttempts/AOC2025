@@ -126,3 +126,12 @@ test "part 2" {
 
     try std.testing.expectEqual(14, try part2(allocator, input));
 }
+
+test "part 2 edge case" {
+    const input = @embedFile("inputs/edge_case.txt");
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    try std.testing.expectEqual(41, try part2(allocator, input));
+}
