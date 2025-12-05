@@ -51,9 +51,10 @@ pub fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
 
 pub fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     var fresh_ingredients: usize = 0;
+
+    // Parse Ranges Data into ArrayLists
     var ranges: std.ArrayList(Range) = .empty;
     defer ranges.deinit(allocator);
-
     var lines = std.mem.splitScalar(u8, input, '\n');
     while (lines.next()) |line| {
         if (line.len == 0) break; // Handle change in sections
@@ -66,35 +67,33 @@ pub fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
         std.debug.print("{s}\n", .{line});
     }
 
+    // Sort Ranges by Start Value
     std.mem.sort(Range, ranges.items, {}, struct {
         fn lessThan(_: void, a: Range, b: Range) bool {
             return a.start < b.start;
         }
     }.lessThan);
 
+    // Merge Overlapping Ranges
     var merged: std.ArrayList(Range) = .empty;
     defer merged.deinit(allocator);
+    try merged.append(allocator, ranges.items[0]);
 
-    if (ranges.items.len > 0) {
-        try merged.append(allocator, ranges.items[0]);
+    for (ranges.items[1..]) |current| {
+        var last = &merged.items[merged.items.len - 1];
 
-        for (ranges.items[1..]) |current| {
-            var last = &merged.items[merged.items.len - 1];
-
-            if (current.start <= last.end + 1) {
-                // Ranges overlap or are adjacent, merge them
-                last.end = @max(last.end, current.end);
-                std.debug.print("Merged Range: {d}-{d}\n", .{ current.start, last.end });
-            } else {
-                // No overlap, add as new range
-                try merged.append(allocator, current);
-            }
+        if (current.start <= last.end + 1) { // Ranges overlap or are adjacent, merge them
+            last.end = @max(last.end, current.end);
+            std.debug.print("Merged Range: {d}-{d}\n", .{ current.start, last.end });
+        } else { // No overlap, add as new range
+            try merged.append(allocator, current);
         }
     }
 
+    // Count Total Unique IDs in Merged Ranges
     for (merged.items) |value| {
-        std.debug.print("Counting Range: {d}-{d}\n", .{ value.start, value.end });
         fresh_ingredients += (value.end - value.start + 1);
+        std.debug.print("Counting Range: {d}-{d}\n", .{ value.start, value.end });
     }
 
     return fresh_ingredients;
