@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const Coord = struct { x: usize, y: usize };
+const CoordMap = std.ArrayHashMap(Coord, u8, std.array_hash_map.AutoContext(Coord), true);
 
 const DIRECTIONS = [8][2]i32{
     .{ -1, 0 }, // left
@@ -29,35 +30,52 @@ pub fn main() !void {
 }
 
 pub fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
-    var map = std.ArrayHashMap(Coord, u8, std.array_hash_map.AutoContext(Coord), true).init(allocator);
+    var map = CoordMap.init(allocator);
     defer map.deinit();
 
     const max_size = try mapBuilder(&map, input);
-    printMap(&map, max_size);
+    printMap(map, max_size);
 
     return removeRoll(&map, max_size);
 }
 
-pub fn mapBuilder(map: *std.ArrayHashMap(Coord, u8, std.array_hash_map.AutoContext(Coord), true), input: []const u8) !Coord {
+pub fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
+    var map = CoordMap.init(allocator);
+    defer map.deinit();
+
+    const max_size = try mapBuilder(&map, input);
+    printMap(map, max_size);
+    std.debug.print("Starting removal process...\n", .{});
+
+    var total_rolls_removed: usize = 0;
+    while (true) {
+        const rolls_removed = try removeRoll(&map, max_size);
+        printMap(map, max_size);
+        std.debug.print("Rolls removed this pass: {d}\n", .{rolls_removed});
+        if (rolls_removed == 0) break;
+        total_rolls_removed += rolls_removed;
+    }
+
+    return total_rolls_removed;
+}
+
+pub fn mapBuilder(map: *CoordMap, input: []const u8) !Coord {
     var max_size: Coord = .{ .x = 0, .y = 0 };
     var current_pos: Coord = .{ .x = 0, .y = 0 };
     var lines = std.mem.splitScalar(u8, input, '\n');
     while (lines.next()) |line| {
+        current_pos.x = 0;
         while (current_pos.x < line.len) {
             try map.put(current_pos, line[current_pos.x]);
             current_pos.x += 1;
-            if (current_pos.x > max_size.x) {
-                max_size.x = current_pos.x;
-            }
         }
-        current_pos.x = 0;
         current_pos.y += 1;
-        max_size.y = current_pos.y;
     }
+    max_size = .{ .x = current_pos.x, .y = current_pos.y };
     return max_size;
 }
 
-pub fn printMap(map: *std.ArrayHashMap(Coord, u8, std.array_hash_map.AutoContext(Coord), true), max_size: Coord) void {
+pub fn printMap(map: CoordMap, max_size: Coord) void {
     for (0..max_size.y) |y| {
         for (0..max_size.x) |x| {
             std.debug.print("{c}", .{map.get(.{ .x = x, .y = y }) orelse '?'});
@@ -66,17 +84,10 @@ pub fn printMap(map: *std.ArrayHashMap(Coord, u8, std.array_hash_map.AutoContext
     }
 }
 
-pub fn removeRoll(map: *std.ArrayHashMap(Coord, u8, std.array_hash_map.AutoContext(Coord), true), max_size: Coord) !usize {
+pub fn removeRoll(map: *CoordMap, max_size: Coord) !usize {
     var valid_rolls: usize = 0;
 
-    // First pass: clear all X marks to .
-    for (0..max_size.y) |y| {
-        for (0..max_size.x) |x| {
-            if ((map.get(.{ .x = x, .y = y }) orelse '?') == 'X') {
-                try map.put(.{ .x = x, .y = y }, '.');
-            }
-        }
-    }
+    try cleanMap(map, max_size);
 
     for (0..max_size.y) |y| {
         for (0..max_size.x) |x| {
@@ -103,24 +114,14 @@ pub fn removeRoll(map: *std.ArrayHashMap(Coord, u8, std.array_hash_map.AutoConte
     return valid_rolls;
 }
 
-pub fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
-    var map = std.ArrayHashMap(Coord, u8, std.array_hash_map.AutoContext(Coord), true).init(allocator);
-    defer map.deinit();
-
-    const max_size = try mapBuilder(&map, input);
-    printMap(&map, max_size);
-    std.debug.print("Starting removal process...\n", .{});
-
-    var total_rolls_removed: usize = 0;
-    while (true) {
-        const rolls_removed = try removeRoll(&map, max_size);
-        printMap(&map, max_size);
-        std.debug.print("Rolls removed this pass: {d}\n", .{rolls_removed});
-        if (rolls_removed == 0) break;
-        total_rolls_removed += rolls_removed;
+pub fn cleanMap(map: *CoordMap, max_size: Coord) !void {
+    for (0..max_size.y) |y| {
+        for (0..max_size.x) |x| {
+            if ((map.get(.{ .x = x, .y = y }) orelse '?') == 'X') {
+                try map.put(.{ .x = x, .y = y }, '.');
+            }
+        }
     }
-
-    return total_rolls_removed;
 }
 
 test "part 1" {
@@ -138,7 +139,7 @@ test "map builder" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    var map = std.ArrayHashMap(Coord, u8, std.array_hash_map.AutoContext(Coord), true).init(allocator);
+    var map = CoordMap.init(allocator);
     defer map.deinit();
 
     const max_size = try mapBuilder(&map, input);
