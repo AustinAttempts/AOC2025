@@ -39,7 +39,7 @@ pub fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
         const id = try std.fmt.parseInt(usize, line, 10);
         for (range.items) |value| {
             if (id >= value.start and id <= value.end) {
-                std.debug.print("{d} <-- Fresh Ingredient\n", .{id});
+                std.debug.print("{d} <- Fresh Ingredient\n", .{id});
                 fresh_ingredients += 1;
                 break;
             }
@@ -84,7 +84,7 @@ pub fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
 
         if (current.start <= last.end + 1) { // Ranges overlap or are adjacent, merge them
             last.end = @max(last.end, current.end);
-            std.debug.print("Merged Range: {d}-{d}\n", .{ current.start, last.end });
+            std.debug.print("{d}-{d} & {d}-{d} -> {d}-{d}\n", .{ last.start, last.end, current.start, current.end, last.start, current.end });
         } else { // No overlap, add as new range
             try merged.append(allocator, current);
         }
@@ -105,6 +105,7 @@ test "part 1" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
+    std.debug.print("\nRunning part 1 test...\n", .{});
     try std.testing.expectEqual(3, try part1(allocator, input));
 }
 
@@ -114,6 +115,7 @@ test "part 2" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
+    std.debug.print("\nRunning part 2 test...\n", .{});
     try std.testing.expectEqual(14, try part2(allocator, input));
 }
 
@@ -123,5 +125,6 @@ test "part 2 edge case" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
+     std.debug.print("\nRunning part 2 edge case test...\n", .{});
     try std.testing.expectEqual(41, try part2(allocator, input));
 }
