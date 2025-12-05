@@ -51,8 +51,8 @@ pub fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
 
 pub fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     var fresh_ingredients: usize = 0;
-    var range: std.ArrayList(Range) = .empty;
-    defer range.deinit(allocator);
+    var ranges: std.ArrayList(Range) = .empty;
+    defer ranges.deinit(allocator);
 
     var lines = std.mem.splitScalar(u8, input, '\n');
     while (lines.next()) |line| {
@@ -62,46 +62,37 @@ pub fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
         const start_id = try std.fmt.parseInt(usize, bounds.next().?, 10);
         const end_id = try std.fmt.parseInt(usize, bounds.next().?, 10);
         const valid_range: Range = .{ .start = start_id, .end = end_id };
-        try range.append(allocator, valid_range);
+        try ranges.append(allocator, valid_range);
         std.debug.print("{s}\n", .{line});
     }
 
-    var sorted = false;
-    while (!sorted) {
-        sorted = true;
-        var i: usize = 0;
+    std.mem.sort(Range, ranges.items, {}, struct {
+        fn lessThan(_: void, a: Range, b: Range) bool {
+            return a.start < b.start;
+        }
+    }.lessThan);
 
-        while (i < range.items.len) {
-            var j: usize = i + 1;
-            var merged = false;
+    var merged: std.ArrayList(Range) = .empty;
+    defer merged.deinit(allocator);
 
-            while (j < range.items.len) {
-                const existing = &range.items[i];
-                const check = &range.items[j];
+    if (ranges.items.len > 0) {
+        try merged.append(allocator, ranges.items[0]);
 
-                if (existing.start <= check.end and existing.end >= check.start) {
-                    existing.start = @min(existing.start, check.start);
-                    existing.end = @max(existing.end, check.end);
+        for (ranges.items[1..]) |current| {
+            var last = &merged.items[merged.items.len - 1];
 
-                    std.debug.print("{d}-{d} merged into {d}-{d}\n", .{ check.start, check.end, existing.start, existing.end });
-
-                    _ = range.orderedRemove(j);
-                    sorted = false;
-                    merged = true;
-                } else {
-                    j += 1;
-                }
-            }
-
-            if (merged) {
-                i = 0;
+            if (current.start <= last.end + 1) {
+                // Ranges overlap or are adjacent, merge them
+                last.end = @max(last.end, current.end);
+                std.debug.print("Merged Range: {d}-{d}\n", .{ current.start, last.end });
             } else {
-                i += 1;
+                // No overlap, add as new range
+                try merged.append(allocator, current);
             }
         }
     }
 
-    for (range.items) |value| {
+    for (merged.items) |value| {
         std.debug.print("Counting Range: {d}-{d}\n", .{ value.start, value.end });
         fresh_ingredients += (value.end - value.start + 1);
     }
