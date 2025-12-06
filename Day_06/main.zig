@@ -9,14 +9,69 @@ pub fn main() !void {
 
     const input = @embedFile("inputs/day06.txt");
     std.debug.print("Part 1 Answer: {d}\n", .{try part1(allocator, input)});
+    std.debug.print("Part 2 Answer: {d}\n", .{try part2(allocator, input)});
 
     const elapsed = timer.read();
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
 }
 
-pub fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
+pub fn calcCols(grid: std.ArrayList(std.ArrayList([]const u8))) !usize {
     var sum: usize = 0;
+    const num_equations = grid.items[0].items.len; // Number of equations to calculate
+    var col: usize = 0;
+    while (col < num_equations) : (col += 1) {
+        var local_sum: usize = 0;
+        for (grid.items[0 .. grid.items.len - 1], 0..) |row, row_idx| {
+            const value = row.items[col];
+            if (row_idx == 0) {
+                local_sum = try std.fmt.parseInt(usize, value, 10);
+            } else {
+                const operator = grid.items[grid.items.len - 1].items[col][0];
+                switch (operator) {
+                    '+' => {
+                        local_sum += try std.fmt.parseInt(usize, value, 10);
+                    },
+                    '*' => {
+                        local_sum *= try std.fmt.parseInt(usize, value, 10);
+                    },
+                    else => {
+                        std.debug.print("Unkown Operator: {c}", .{operator});
+                        return error.InvalidOperator;
+                    },
+                }
+            }
+        }
+        sum += local_sum;
+    }
+    return sum;
+}
 
+pub fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
+    var grid: std.ArrayList(std.ArrayList([]const u8)) = .empty;
+    defer {
+        for (grid.items) |*row| {
+            row.deinit(allocator);
+        }
+        grid.deinit(allocator);
+    }
+
+    var lines = std.mem.splitScalar(u8, input, '\n');
+    while (lines.next()) |line| {
+        var vales = std.mem.splitAny(u8, line, " \t");
+        var operands: std.ArrayList([]const u8) = .empty;
+        while (vales.next()) |value| {
+            const cleaned_value = std.mem.trim(u8, value, " \t");
+            if (cleaned_value.len != 0) {
+                try operands.append(allocator, cleaned_value);
+            }
+        }
+        try grid.append(allocator, operands);
+    }
+
+    return calcCols(grid);
+}
+
+pub fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     var grid: std.ArrayList(std.ArrayList([]const u8)) = .empty;
     defer {
         for (grid.items) |*row| {
@@ -39,36 +94,7 @@ pub fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
         try grid.append(allocator, operands);
         std.debug.print("\n", .{});
     }
-
-    const num_equations = grid.items[0].items.len; // Number of equations to calculate
-    var col: usize = 0;
-    while (col < num_equations) : (col += 1) {
-        var local_sum: usize = 0;
-        for (grid.items[0 .. grid.items.len - 1], 0..) |row, row_idx| {
-            const value = row.items[col];
-            if (row_idx == 0) {
-                local_sum = try std.fmt.parseInt(usize, value, 10);
-            } else {
-                const operator = grid.items[grid.items.len - 1].items[col][0];
-                switch (operator) {
-                    '+' => {
-                        local_sum += try std.fmt.parseInt(usize, value, 10);
-                    },
-                    '*' => {
-                        local_sum *= try std.fmt.parseInt(usize, value, 10);
-                    },
-                    else => {
-                        std.debug.print("Unkown Operator: {s}", .{grid.items[grid.items.len - 1].items[col]});
-                        return error.InvalidOperator;
-                    },
-                }
-            }
-        }
-        std.debug.print("Equation {d} sum: {d}\n", .{ col, local_sum });
-        sum += local_sum;
-    }
-
-    return sum;
+    return 0;
 }
 
 test "part 1" {
@@ -97,4 +123,14 @@ test "split whitespace" {
     try std.testing.expectEqualSlices(u8, "328", parts.items[1]);
     try std.testing.expectEqualSlices(u8, "51", parts.items[2]);
     try std.testing.expectEqualSlices(u8, "64", parts.items[3]);
+}
+
+test "part 2" {
+    const input = @embedFile("inputs/test_case.txt");
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    std.debug.print("\nRunning part 2 test...\n", .{});
+    try std.testing.expectEqual(3263827, try part2(allocator, input));
 }
