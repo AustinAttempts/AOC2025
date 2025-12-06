@@ -4,6 +4,7 @@ const Range = struct {
     start: usize,
     end: usize,
 };
+
 pub fn main() !void {
     var timer = try std.time.Timer.start();
 
