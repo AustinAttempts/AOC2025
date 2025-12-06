@@ -72,7 +72,7 @@ pub fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
 }
 
 pub fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
-    var grid: std.ArrayList(std.ArrayList([]const u8)) = .empty;
+    var grid: std.ArrayList(std.ArrayList(u8)) = .empty;
     defer {
         for (grid.items) |*row| {
             row.deinit(allocator);
@@ -82,17 +82,38 @@ pub fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
 
     var lines = std.mem.splitScalar(u8, input, '\n');
     while (lines.next()) |line| {
-        var vales = std.mem.splitAny(u8, line, " \t");
-        var operands: std.ArrayList([]const u8) = .empty;
-        while (vales.next()) |value| {
-            const cleaned_value = std.mem.trim(u8, value, " \t");
-            if (cleaned_value.len != 0) {
-                try operands.append(allocator, cleaned_value);
-            }
-            std.debug.print("{s} ", .{cleaned_value});
+        var chars: std.ArrayList(u8) = .empty;
+        for (line) |char| {
+            try chars.append(allocator, char);
         }
-        try grid.append(allocator, operands);
-        std.debug.print("\n", .{});
+        try grid.append(allocator, chars);
+    }
+
+    var math_values: std.ArrayList([]const u8) = .empty;
+    defer {
+        for (math_values.items) |str| {
+            allocator.free(str);
+        }
+        math_values.deinit(allocator);
+    }
+
+    // Iterate columns from right to left
+    const num_cols = grid.items[0].items.len;
+    var col: usize = num_cols;
+    while (col > 0) {
+        col -= 1;
+        // Iterate rows from top to bottom (excluding last row if needed)
+        var numbers: std.ArrayList(u8) = .empty;
+        defer numbers.deinit(allocator);
+        for (grid.items[0 .. grid.items.len - 1]) |row| {
+            const value = row.items[col];
+            // TODO: Handle value
+            if (value != ' ') {
+                try numbers.append(allocator, value);
+            }
+        }
+        try math_values.append(allocator, try numbers.toOwnedSlice(allocator));
+        std.debug.print("Column {d} has value: {s}\n", .{ col, math_values.items[num_cols - col - 1] });
     }
     return 0;
 }
