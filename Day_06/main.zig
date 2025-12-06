@@ -72,6 +72,8 @@ pub fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
 }
 
 pub fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
+    var sum: usize = 0;
+
     var grid: std.ArrayList(std.ArrayList(u8)) = .empty;
     defer {
         for (grid.items) |*row| {
@@ -115,7 +117,71 @@ pub fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
         try math_values.append(allocator, try numbers.toOwnedSlice(allocator));
         std.debug.print("Column {d} has value: {s}\n", .{ col, math_values.items[num_cols - col - 1] });
     }
-    return 0;
+
+    std.debug.print("\nMath Values:\n", .{});
+    for (math_values.items) |values| {
+        std.debug.print("{s}\n", .{values});
+    }
+
+    // Column range
+    var upper = num_cols - 1;
+    col = num_cols;
+
+    while (col > 0) {
+        col -= 1;
+        switch (grid.items[grid.items.len - 1].items[col]) {
+            '+' => {
+                std.debug.print("found + at col: {d}\n", .{col});
+                std.debug.print("add values from col: {d}-{d}\n", .{ col, upper });
+                var local_sum: usize = 0;
+                const right_lim = num_cols - upper - 1;
+                const left_lim = num_cols - col;
+                std.debug.print("checking math_values[{d} .. {d}]\n", .{ right_lim, left_lim });
+
+                for (math_values.items[right_lim..left_lim]) |value| {
+                    if (value.len != 0) {
+                        const value_int = try std.fmt.parseInt(usize, value, 10);
+                        std.debug.print("{d} ", .{value_int});
+                        local_sum += value_int;
+                    }
+                }
+                std.debug.print("Answer: {d}\n", .{local_sum});
+                sum += local_sum;
+                if (col > 0) {
+                    upper = col - 1;
+                }
+            },
+            '*' => {
+                std.debug.print("found * at col: {d}\n", .{col});
+                std.debug.print("multiply values from col: {d}-{d}\n", .{ col, upper });
+                var local_sum: usize = 0;
+                const right_lim = num_cols - upper - 1;
+                const left_lim = num_cols - col;
+                std.debug.print("checking math_values[{d} .. {d}]\n", .{ right_lim, left_lim });
+                for (math_values.items[right_lim..left_lim]) |value| {
+                    if (value.len != 0) {
+                        const value_int = try std.fmt.parseInt(usize, value, 10);
+                        std.debug.print("{d} ", .{value_int});
+                        if (local_sum == 0) {
+                            local_sum = value_int;
+                        } else {
+                            local_sum *= value_int;
+                        }
+                    }
+                }
+                std.debug.print("Answer: {d}\n", .{local_sum});
+                sum += local_sum;
+                if (col > 0) {
+                    upper = col - 1;
+                }
+            },
+            else => {
+                // Do nothing
+            },
+        }
+    }
+
+    return sum;
 }
 
 test "part 1" {
