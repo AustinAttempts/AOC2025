@@ -19,7 +19,7 @@ pub fn main() !void {
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
 }
 
-pub fn mapBuilder(map: *CoordMap, input: []const u8) !Coord {
+fn mapBuilder(map: *CoordMap, input: []const u8) !Coord {
     var max_size: Coord = .{ .x = 0, .y = 0 };
     var current_pos: Coord = .{ .x = 0, .y = 0 };
     var lines = std.mem.splitScalar(u8, input, '\n');
@@ -39,7 +39,7 @@ pub fn mapBuilder(map: *CoordMap, input: []const u8) !Coord {
     return max_size;
 }
 
-pub fn printMap(map: CoordMap, max_size: Coord) void {
+fn printMap(map: CoordMap, max_size: Coord) void {
     for (0..max_size.y) |y| {
         for (0..max_size.x) |x| {
             std.debug.print("{c}", .{(map.get(.{ .x = x, .y = y }).?).char});
@@ -48,58 +48,52 @@ pub fn printMap(map: CoordMap, max_size: Coord) void {
     }
 }
 
-pub fn tachyonPath(map: *CoordMap, max_size: Coord) !void {
+fn updateCell(map: *CoordMap, coord: Coord, current_futures: usize) !void {
+    const existing = map.get(coord).?;
+
+    const new_node: Node = if (existing.char == '|')
+        .{ .char = '|', .futures = existing.futures + current_futures }
+    else
+        .{ .char = '|', .futures = current_futures };
+
+    try map.put(coord, new_node);
+}
+
+fn tachyonPath(map: *CoordMap, max_size: Coord) !void {
     for (0..max_size.y) |y| {
         for (0..max_size.x) |x| {
             const current_node = map.get(.{ .x = x, .y = y }).?;
             const val = current_node.char;
             if (val == 'S' or val == '|') {
                 if (y + 1 >= max_size.y) break;
-                const down: Coord = .{ .x = x, .y = y + 1 };
-                const val_down = map.get(down).?.char;
-                switch (val_down) {
+                const down_coord: Coord = .{ .x = x, .y = y + 1 };
+                const down_node = map.get(down_coord).?;
+                switch (down_node.char) {
                     '.' => {
                         const new_node: Node = .{ .char = '|', .futures = current_node.futures };
                         try map.put(.{ .x = x, .y = y + 1 }, new_node);
                     },
                     '^' => {
-                        const left: Coord = .{ .x = x - 1, .y = y + 1 };
-                        const left_node = map.get(left).?;
-                        if (left_node.char == '|') {
-                            const new_node: Node = .{ .char = '|', .futures = left_node.futures + current_node.futures };
-                            try map.put(left, new_node);
-                        } else {
-                            const new_node: Node = .{ .char = '|', .futures = current_node.futures };
-                            try map.put(left, new_node);
-                        }
+                        const left_coord: Coord = .{ .x = x - 1, .y = y + 1 };
+                        try updateCell(map, left_coord, current_node.futures);
 
-                        const right: Coord = .{ .x = x + 1, .y = y + 1 };
-                        const right_node = map.get(right).?;
-                        if (right_node.char == '|') {
-                            const new_node: Node = .{ .char = '|', .futures = right_node.futures + current_node.futures };
-                            try map.put(right, new_node);
-                        } else {
-                            const new_node: Node = .{ .char = '|', .futures = current_node.futures };
-                            try map.put(right, new_node);
-                        }
+                        const right_coord: Coord = .{ .x = x + 1, .y = y + 1 };
+                        try updateCell(map, right_coord, current_node.futures);
                     },
                     '|' => {
-                        const old_node = map.get(down).?;
-                        const new_node: Node = .{ .char = '|', .futures = old_node.futures + current_node.futures };
-                        try map.put(.{ .x = x, .y = y + 1 }, new_node);
+                        try updateCell(map, down_coord, current_node.futures);
                     },
                     else => {
-                        std.debug.print("Unkown case when checking {d},{d}: {c}\n", .{ x, y + 1, val_down });
+                        std.debug.print("Unkown case when checking {d},{d}: {c}\n", .{ x, y + 1, down_node.char });
                         break;
                     },
                 }
             }
         }
-        printMap(map.*, max_size);
     }
 }
 
-pub fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
+fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
     var sum: usize = 0;
     var map = CoordMap.init(allocator);
     defer map.deinit();
@@ -108,6 +102,8 @@ pub fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
     printMap(map, max_size);
 
     try tachyonPath(&map, max_size);
+
+    printMap(map, max_size);
 
     for (0..max_size.y) |y| {
         for (0..max_size.x) |x| {
@@ -123,20 +119,21 @@ pub fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
     return sum;
 }
 
-pub fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
+fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     var sum: usize = 0;
     var map = CoordMap.init(allocator);
     defer map.deinit();
 
     const max_size = try mapBuilder(&map, input);
-    printMap(map, max_size);
-
     try tachyonPath(&map, max_size);
+
+    std.debug.print("Path Totals:\n", .{});
 
     for (0..max_size.x) |x| {
         const node = map.get(.{ .x = x, .y = max_size.y - 1 }).?;
         if (node.char == '|') {
             sum += node.futures;
+            std.debug.print("\t{d}\n", .{node.futures});
         }
     }
 
