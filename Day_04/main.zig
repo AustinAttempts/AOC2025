@@ -29,7 +29,7 @@ pub fn main() !void {
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
 }
 
-pub fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
+fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
     var map = CoordMap.init(allocator);
     defer map.deinit();
 
@@ -39,7 +39,7 @@ pub fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
     return removeRoll(&map, max_size);
 }
 
-pub fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
+fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     var map = CoordMap.init(allocator);
     defer map.deinit();
 
@@ -59,7 +59,7 @@ pub fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     return total_rolls_removed;
 }
 
-pub fn mapBuilder(map: *CoordMap, input: []const u8) !Coord {
+fn mapBuilder(map: *CoordMap, input: []const u8) !Coord {
     var max_size: Coord = .{ .x = 0, .y = 0 };
     var current_pos: Coord = .{ .x = 0, .y = 0 };
     var lines = std.mem.splitScalar(u8, input, '\n');
@@ -75,7 +75,7 @@ pub fn mapBuilder(map: *CoordMap, input: []const u8) !Coord {
     return max_size;
 }
 
-pub fn printMap(map: CoordMap, max_size: Coord) void {
+fn printMap(map: CoordMap, max_size: Coord) void {
     for (0..max_size.y) |y| {
         for (0..max_size.x) |x| {
             std.debug.print("{c}", .{map.get(.{ .x = x, .y = y }) orelse '?'});
@@ -84,7 +84,7 @@ pub fn printMap(map: CoordMap, max_size: Coord) void {
     }
 }
 
-pub fn removeRoll(map: *CoordMap, max_size: Coord) !usize {
+fn removeRoll(map: *CoordMap, max_size: Coord) !usize {
     var valid_rolls: usize = 0;
 
     try cleanMap(map, max_size);
@@ -114,7 +114,7 @@ pub fn removeRoll(map: *CoordMap, max_size: Coord) !usize {
     return valid_rolls;
 }
 
-pub fn cleanMap(map: *CoordMap, max_size: Coord) !void {
+fn cleanMap(map: *CoordMap, max_size: Coord) !void {
     for (0..max_size.y) |y| {
         for (0..max_size.x) |x| {
             if ((map.get(.{ .x = x, .y = y }) orelse '?') == 'X') {

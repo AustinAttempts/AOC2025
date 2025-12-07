@@ -15,7 +15,7 @@ pub fn main() !void {
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
 }
 
-pub fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
+fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
     var joltage_sum: usize = 0;
     var lines = std.mem.splitScalar(u8, input, '\n');
     while (lines.next()) |bank| {
@@ -31,7 +31,7 @@ pub fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
     return joltage_sum;
 }
 
-pub fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
+fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     var joltage_sum: usize = 0;
     const JOLTAGE_LENGTH = 12;
     var lines = std.mem.splitScalar(u8, input, '\n');

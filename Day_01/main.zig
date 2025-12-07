@@ -13,7 +13,7 @@ pub fn main() !void {
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
 }
 
-pub fn part1(input: []const u8) !i32 {
+fn part1(input: []const u8) !i32 {
     var code: i32 = 0;
     var lock_value: i32 = STARTING_LOCK_VALUE;
     var lines = std.mem.splitScalar(u8, input, '\n');
@@ -40,7 +40,7 @@ pub fn part1(input: []const u8) !i32 {
     return code;
 }
 
-pub fn part2(input: []const u8) !usize {
+fn part2(input: []const u8) !usize {
     var code: usize = 0;
     var lock_value: i32 = STARTING_LOCK_VALUE;
     var lines = std.mem.splitScalar(u8, input, '\n');

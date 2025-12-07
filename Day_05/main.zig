@@ -20,7 +20,7 @@ pub fn main() !void {
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
 }
 
-pub fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
+fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
     var fresh_ingredients: usize = 0;
     var range: std.ArrayList(Range) = .empty;
     defer range.deinit(allocator);
@@ -50,7 +50,7 @@ pub fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
     return fresh_ingredients;
 }
 
-pub fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
+fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     var fresh_ingredients: usize = 0;
 
     // Parse Ranges Data into ArrayLists
@@ -126,6 +126,6 @@ test "part 2 edge case" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-     std.debug.print("\nRunning part 2 edge case test...\n", .{});
+    std.debug.print("\nRunning part 2 edge case test...\n", .{});
     try std.testing.expectEqual(41, try part2(allocator, input));
 }

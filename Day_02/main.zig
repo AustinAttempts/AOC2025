@@ -11,7 +11,7 @@ pub fn main() !void {
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
 }
 
-pub fn part1(input: []const u8) !usize {
+fn part1(input: []const u8) !usize {
     var bad_id_sum: usize = 0;
     var id_ranges = std.mem.splitScalar(u8, input, ',');
     var buf: [32]u8 = undefined; // Attempt to remove allocations
@@ -38,7 +38,7 @@ pub fn part1(input: []const u8) !usize {
     return bad_id_sum;
 }
 
-pub fn bad_id_part_1(id: []const u8) bool {
+fn bad_id_part_1(id: []const u8) bool {
     const len = id.len;
     const first_half = id[0 .. len / 2];
     const second_half = id[len / 2 .. len];
@@ -49,7 +49,7 @@ pub fn bad_id_part_1(id: []const u8) bool {
     return false;
 }
 
-pub fn part2(input: []const u8) !usize {
+fn part2(input: []const u8) !usize {
     var bad_id_sum: usize = 0;
     var id_ranges = std.mem.splitScalar(u8, input, ',');
     var buf: [32]u8 = undefined; // Attempt to remove allocations
@@ -76,7 +76,7 @@ pub fn part2(input: []const u8) !usize {
     return bad_id_sum;
 }
 
-pub fn bad_id_part_2(id: []const u8) bool {
+fn bad_id_part_2(id: []const u8) bool {
     const len = id.len;
     for (1..(len / 2) + 1) |i| {
         if (len % i == 0) {

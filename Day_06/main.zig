@@ -15,7 +15,7 @@ pub fn main() !void {
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
 }
 
-pub fn calcCols(grid: std.ArrayList(std.ArrayList([]const u8))) !usize {
+fn calcCols(grid: std.ArrayList(std.ArrayList([]const u8))) !usize {
     var sum: usize = 0;
     const num_equations = grid.items[0].items.len; // Number of equations to calculate
     var col: usize = 0;
@@ -46,7 +46,7 @@ pub fn calcCols(grid: std.ArrayList(std.ArrayList([]const u8))) !usize {
     return sum;
 }
 
-pub fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
+fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
     var grid: std.ArrayList(std.ArrayList([]const u8)) = .empty;
     defer {
         for (grid.items) |*row| {
@@ -71,7 +71,7 @@ pub fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
     return calcCols(grid);
 }
 
-pub fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
+fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     var sum: usize = 0;
 
     var grid: std.ArrayList(std.ArrayList(u8)) = .empty;
