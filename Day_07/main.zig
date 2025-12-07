@@ -56,7 +56,6 @@ pub fn tachyonPath1(map: *CoordMap, max_size: Coord) !void {
                     '^' => {
                         try map.put(.{ .x = x + 1, .y = y + 1 }, '|');
                         try map.put(.{ .x = x - 1, .y = y + 1 }, '|');
-                        printMap(map.*, max_size);
                     },
                     '|' => {
                         // Do Nothing
@@ -68,6 +67,7 @@ pub fn tachyonPath1(map: *CoordMap, max_size: Coord) !void {
                 }
             }
         }
+        printMap(map.*, max_size);
     }
 }
 
