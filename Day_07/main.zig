@@ -48,6 +48,26 @@ fn printMap(map: CoordMap, max_size: Coord) void {
     }
 }
 
+fn printFutureCounts(map: CoordMap, max_size: Coord) void {
+    for (0..max_size.y) |y| {
+        for (0..max_size.x) |x| {
+            const node = map.get(.{ .x = x, .y = y }).?;
+            switch (node.char) {
+                '|' => {
+                    std.debug.print("{X}", .{node.futures});
+                },
+                '.' => {
+                    std.debug.print(" ", .{});
+                },
+                else => {
+                    std.debug.print("{c}", .{node.char});
+                },
+            }
+        }
+        std.debug.print("\n", .{});
+    }
+}
+
 fn updateCell(map: *CoordMap, coord: Coord, current_futures: usize) !void {
     const existing = map.get(coord).?;
 
@@ -126,6 +146,8 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
 
     const max_size = try mapBuilder(&map, input);
     try tachyonPath(&map, max_size);
+
+    printFutureCounts(map, max_size);
 
     std.debug.print("Path Totals:\n", .{});
 
