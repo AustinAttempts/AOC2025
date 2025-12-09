@@ -253,8 +253,6 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     // Build circuits from connections
     for (connections.items) |conn| {
         last_connection = conn;
-        std.debug.print("({s})<->({s}) = {d}\n", .{ conn.a.str, conn.b.str, conn.dist });
-
         var placed = false;
 
         for (circuits.items) |*circuit| {
@@ -300,8 +298,6 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
             break;
         }
     }
-
-    printCircuits(circuits);
 
     var sum: usize = 1;
     if (last_connection != null) {
