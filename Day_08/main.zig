@@ -1,6 +1,7 @@
 const std = @import("std");
 
-const CoordMap = std.ArrayHashMap(usize, Connection, std.array_hash_map.AutoContext(usize), true);
+const RELEVANT_CIRCUITS_CNT: usize = 3;
+
 const Coord = struct { x: usize, y: usize, z: usize, str: []const u8 };
 const Connection = struct {
     a: Coord,
@@ -20,7 +21,72 @@ const Connection = struct {
     }
 };
 
-const RELEVANT_CIRCUITS_CNT: usize = 3;
+const UnionFind = struct {
+    parent: []usize,
+    rank: []usize,
+    size: []usize,
+    allocator: std.mem.Allocator,
+
+    fn init(allocator: std.mem.Allocator, n: usize) !UnionFind {
+        const parent = try allocator.alloc(usize, n);
+        const rank = try allocator.alloc(usize, n);
+        const size = try allocator.alloc(usize, n);
+
+        for (0..n) |i| {
+            parent[i] = i;
+            rank[i] = 0;
+            size[i] = 1;
+        }
+
+        return .{ .parent = parent, .rank = rank, .size = size, .allocator = allocator };
+    }
+
+    fn deinit(self: *UnionFind) void {
+        self.allocator.free(self.parent);
+        self.allocator.free(self.rank);
+        self.allocator.free(self.size);
+    }
+
+    fn find(self: *UnionFind, x: usize) usize {
+        if (self.parent[x] != x) {
+            self.parent[x] = self.find(self.parent[x]);
+        }
+        return self.parent[x];
+    }
+
+    fn unite(self: *UnionFind, x: usize, y: usize) bool {
+        const root_x = self.find(x);
+        const root_y = self.find(y);
+
+        if (root_x == root_y) return false;
+
+        if (self.rank[root_x] < self.rank[root_y]) {
+            self.parent[root_x] = root_y;
+            self.size[root_y] += self.size[root_x];
+        } else if (self.rank[root_x] > self.rank[root_y]) {
+            self.parent[root_y] = root_x;
+            self.size[root_x] += self.size[root_y];
+        } else {
+            self.parent[root_y] = root_x;
+            self.rank[root_x] += 1;
+            self.size[root_x] += self.size[root_y];
+        }
+
+        return true;
+    }
+
+    fn getSize(self: *UnionFind, x: usize) usize {
+        return self.size[self.find(x)];
+    }
+
+    fn numComponents(self: *UnionFind) usize {
+        var count: usize = 0;
+        for (0..self.parent.len) |i| {
+            if (self.parent[i] == i) count += 1;
+        }
+        return count;
+    }
+};
 
 pub fn main() !void {
     var timer = try std.time.Timer.start();
@@ -37,75 +103,15 @@ pub fn main() !void {
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
 }
 
-fn mergeCircuits(allocator: std.mem.Allocator, circuits: *std.ArrayList(std.ArrayList(Coord))) !void {
-    var i: usize = 0;
-    while (i < circuits.items.len) {
-        var j: usize = i + 1;
-        while (j < circuits.items.len) {
-            var has_overlap = false;
-
-            // Check if circuit i and circuit j have any common coordinates
-            for (circuits.items[i].items) |coord_i| {
-                for (circuits.items[j].items) |coord_j| {
-                    if (std.mem.eql(u8, coord_i.str, coord_j.str)) {
-                        has_overlap = true;
-                        break;
-                    }
-                }
-                if (has_overlap) break;
-            }
-
-            if (has_overlap) {
-                // Merge circuit j into circuit i
-                for (circuits.items[j].items) |coord_j| {
-                    // Check if coord_j is already in circuit i
-                    var already_exists = false;
-                    for (circuits.items[i].items) |coord_i| {
-                        if (std.mem.eql(u8, coord_i.str, coord_j.str)) {
-                            already_exists = true;
-                            break;
-                        }
-                    }
-
-                    // Only add if it doesn't exist
-                    if (!already_exists) {
-                        try circuits.items[i].append(allocator, coord_j);
-                    }
-                }
-
-                // Remove circuit j
-                var removed = circuits.orderedRemove(j);
-                removed.deinit(allocator);
-                // Don't increment j since we removed an element
-            } else {
-                j += 1;
-            }
-        }
-        i += 1;
-    }
-}
-
-fn compareCircuitSize(context: void, a: std.ArrayList(Coord), b: std.ArrayList(Coord)) bool {
-    _ = context;
-    return a.items.len > b.items.len;
-}
-
-fn printCircuits(circuits: std.ArrayList(std.ArrayList(Coord))) void {
-    std.debug.print("\nCircuits:\n", .{});
-    for (circuits.items) |circuit| {
-        std.debug.print("Circuit: ", .{});
-        for (circuit.items) |coord| {
-            std.debug.print("({s}) ", .{coord.str});
-        }
-        std.debug.print("\n", .{});
-    }
-}
-
 fn part1(allocator: std.mem.Allocator, input: []const u8, pairs: usize) !usize {
     var coords: std.ArrayList(Coord) = .empty;
     defer _ = coords.deinit(allocator);
 
+    var coord_map = std.StringHashMap(usize).init(allocator);
+    defer coord_map.deinit();
+
     // Parse input into list of coordinates
+    var idx: usize = 0;
     var lines = std.mem.splitScalar(u8, input, '\n');
     while (lines.next()) |line| {
         var values = std.mem.splitScalar(u8, line, ',');
@@ -114,6 +120,8 @@ fn part1(allocator: std.mem.Allocator, input: []const u8, pairs: usize) !usize {
         const z = try std.fmt.parseInt(usize, values.next().?, 10);
         const coord: Coord = .{ .x = x, .y = y, .z = z, .str = line };
         try coords.append(allocator, coord);
+        try coord_map.put(line, idx);
+        idx += 1;
     }
 
     var connections: std.ArrayList(Connection) = .empty;
@@ -122,8 +130,7 @@ fn part1(allocator: std.mem.Allocator, input: []const u8, pairs: usize) !usize {
     // Create list of all possible connections between coordinates
     for (coords.items, 0..) |start, i| {
         for (coords.items[i + 1 ..]) |end| {
-            const conn: Connection = Connection.init(start, end);
-            try connections.append(allocator, conn);
+            try connections.append(allocator, Connection.init(start, end));
         }
     }
 
@@ -143,74 +150,53 @@ fn part1(allocator: std.mem.Allocator, input: []const u8, pairs: usize) !usize {
         circuits.deinit(allocator);
     }
 
-    // Build circuits from connections
-    for (0..pairs) |i| {
-        const conn = connections.items[i];
-        std.debug.print("({s})<->({s}) = {d}\n", .{ conn.a.str, conn.b.str, conn.dist });
+    var uf = try UnionFind.init(allocator, coords.items.len);
+    defer uf.deinit();
 
-        var placed = false;
-
-        for (circuits.items) |*circuit| {
-            var found_a = false;
-            var found_b = false;
-
-            for (circuit.items) |coord| {
-                if (std.mem.eql(u8, coord.str, conn.a.str)) found_a = true;
-                if (std.mem.eql(u8, coord.str, conn.b.str)) found_b = true;
-            }
-
-            if (found_a and !found_b) {
-                try circuit.append(allocator, conn.b);
-                placed = true;
-                break;
-            } else if (found_b and !found_a) {
-                try circuit.append(allocator, conn.a);
-                placed = true;
-                break;
-            } else if (found_a and found_b) {
-                placed = true;
-                break;
-            }
-        }
-
-        if (!placed) {
-            var new_circuit: std.ArrayList(Coord) = .empty;
-            try new_circuit.append(allocator, conn.a);
-            try new_circuit.append(allocator, conn.b);
-            try circuits.append(allocator, new_circuit);
-        }
+    for (connections.items[0..pairs]) |conn| {
+        const idx_a = coord_map.get(conn.a.str).?;
+        const idx_b = coord_map.get(conn.b.str).?;
+        _ = uf.unite(idx_a, idx_b);
     }
 
-    // Merge circuits that overlap
-    var changed = true;
-    while (changed) {
-        const original_len = circuits.items.len;
-        try mergeCircuits(allocator, &circuits);
-        changed = circuits.items.len != original_len;
-    }
+    // Find the 3 largest components
+    var component_sizes: std.ArrayList(usize) = .empty;
+    defer component_sizes.deinit(allocator);
 
+    var seen = std.AutoHashMap(usize, void).init(allocator);
+    defer seen.deinit();
+
+    for (0..coords.items.len) |i| {
+        const root = uf.find(i);
+        if (!seen.contains(root)) {
+            try seen.put(root, {});
+            try component_sizes.append(allocator, uf.getSize(root));
+        }
+    }
     // Sort circuits by size
-    std.mem.sort(std.ArrayList(Coord), circuits.items, {}, compareCircuitSize);
-
-    printCircuits(circuits);
+    std.mem.sort(usize, component_sizes.items, {}, std.sort.desc(usize));
 
     // Calulate answer from largest 3 circuits
     std.debug.print("{d} Largest circuit sizes: ", .{RELEVANT_CIRCUITS_CNT});
-    var sum: usize = 1;
-    for (circuits.items[0..RELEVANT_CIRCUITS_CNT]) |circuit| {
-        std.debug.print("{d} ", .{circuit.items.len});
-        sum *= circuit.items.len;
+    var result: usize = 1;
+    for (component_sizes.items[0..RELEVANT_CIRCUITS_CNT]) |size| {
+        std.debug.print("{d} ", .{size});
+        result *= size;
     }
     std.debug.print("\n", .{});
 
-    return sum;
+    return result;
 }
 
 fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     var coords: std.ArrayList(Coord) = .empty;
     defer _ = coords.deinit(allocator);
 
+    var coord_map = std.StringHashMap(usize).init(allocator);
+    defer coord_map.deinit();
+
     // Parse input into list of coordinates
+    var idx: usize = 0;
     var lines = std.mem.splitScalar(u8, input, '\n');
     while (lines.next()) |line| {
         var values = std.mem.splitScalar(u8, line, ',');
@@ -219,6 +205,8 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
         const z = try std.fmt.parseInt(usize, values.next().?, 10);
         const coord: Coord = .{ .x = x, .y = y, .z = z, .str = line };
         try coords.append(allocator, coord);
+        try coord_map.put(line, idx);
+        idx += 1;
     }
 
     var connections: std.ArrayList(Connection) = .empty;
@@ -227,8 +215,7 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     // Create list of all possible connections between coordinates
     for (coords.items, 0..) |start, i| {
         for (coords.items[i + 1 ..]) |end| {
-            const conn: Connection = Connection.init(start, end);
-            try connections.append(allocator, conn);
+            try connections.append(allocator, Connection.init(start, end));
         }
     }
 
@@ -248,64 +235,20 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
         circuits.deinit(allocator);
     }
 
-    // Loop until all connections are in one circuit
-    var last_connection: ?Connection = null;
-    // Build circuits from connections
+    var uf = try UnionFind.init(allocator, coords.items.len);
+    defer uf.deinit();
+
     for (connections.items) |conn| {
-        last_connection = conn;
-        var placed = false;
-
-        for (circuits.items) |*circuit| {
-            var found_a = false;
-            var found_b = false;
-
-            for (circuit.items) |coord| {
-                if (std.mem.eql(u8, coord.str, conn.a.str)) found_a = true;
-                if (std.mem.eql(u8, coord.str, conn.b.str)) found_b = true;
+        const idx_a = coord_map.get(conn.a.str).?;
+        const idx_b = coord_map.get(conn.b.str).?;
+        if (uf.unite(idx_a, idx_b)) {
+            if (uf.numComponents() == 1) {
+                return conn.a.x * conn.b.x;
             }
-
-            if (found_a and !found_b) {
-                try circuit.append(allocator, conn.b);
-                placed = true;
-                break;
-            } else if (found_b and !found_a) {
-                try circuit.append(allocator, conn.a);
-                placed = true;
-                break;
-            } else if (found_a and found_b) {
-                placed = true;
-                break;
-            }
-        }
-
-        if (!placed) {
-            var new_circuit: std.ArrayList(Coord) = .empty;
-            try new_circuit.append(allocator, conn.a);
-            try new_circuit.append(allocator, conn.b);
-            try circuits.append(allocator, new_circuit);
-        }
-
-        // Merge circuits that overlap
-        var changed = true;
-        while (changed) {
-            const original_len = circuits.items.len;
-            try mergeCircuits(allocator, &circuits);
-            changed = circuits.items.len != original_len;
-        }
-
-        // Check if we're done (all coords in one circuit)
-        if (circuits.items.len == 1 and circuits.items[0].items.len == coords.items.len) {
-            break;
         }
     }
 
-    var sum: usize = 1;
-    if (last_connection != null) {
-        std.debug.print("last connection was: {s} <--> {s}\n", .{ last_connection.?.a.str, last_connection.?.b.str });
-        sum = last_connection.?.a.x * last_connection.?.b.x;
-    }
-
-    return sum;
+    return 0;
 }
 
 test "part 1" {
