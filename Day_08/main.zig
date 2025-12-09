@@ -89,12 +89,22 @@ fn compareCircuitSize(context: void, a: std.ArrayList(Coord), b: std.ArrayList(C
     return a.items.len > b.items.len;
 }
 
-fn part1(allocator: std.mem.Allocator, input: []const u8, pairs: usize) !usize {
-    var sum: usize = 1;
+fn printCircuits(circuits: std.ArrayList(std.ArrayList(Coord))) void {
+    std.debug.print("\nCircuits:\n", .{});
+    for (circuits.items) |circuit| {
+        std.debug.print("Circuit: ", .{});
+        for (circuit.items) |coord| {
+            std.debug.print("({s}) ", .{coord.str});
+        }
+        std.debug.print("\n", .{});
+    }
+}
 
+fn part1(allocator: std.mem.Allocator, input: []const u8, pairs: usize) !usize {
     var coords: std.ArrayList(Coord) = .empty;
     defer _ = coords.deinit(allocator);
 
+    // Parse input into list of coordinates
     var lines = std.mem.splitScalar(u8, input, '\n');
     while (lines.next()) |line| {
         var values = std.mem.splitScalar(u8, line, ',');
@@ -108,6 +118,7 @@ fn part1(allocator: std.mem.Allocator, input: []const u8, pairs: usize) !usize {
     var connections: std.ArrayList(Connection) = .empty;
     defer connections.deinit(allocator);
 
+    // Create list of all possible connections between coordinates
     for (coords.items, 0..) |start, i| {
         for (coords.items[i + 1 ..]) |end| {
             const conn: Connection = Connection.init(start, end);
@@ -115,10 +126,7 @@ fn part1(allocator: std.mem.Allocator, input: []const u8, pairs: usize) !usize {
         }
     }
 
-    std.debug.print("Total coordinates: {d}\n", .{coords.items.len});
-    std.debug.print("Total connections: {d}\n", .{connections.items.len});
-
-    // Sort ALL connections by distance
+    // Sort connections by distance
     std.mem.sort(Connection, connections.items, {}, struct {
         fn lessThan(context: void, a: Connection, b: Connection) bool {
             _ = context;
@@ -134,6 +142,7 @@ fn part1(allocator: std.mem.Allocator, input: []const u8, pairs: usize) !usize {
         circuits.deinit(allocator);
     }
 
+    // Build circuits from connections
     for (0..pairs) |i| {
         const conn = connections.items[i];
         std.debug.print("({s})<->({s}) = {d}\n", .{ conn.a.str, conn.b.str, conn.dist });
@@ -171,6 +180,7 @@ fn part1(allocator: std.mem.Allocator, input: []const u8, pairs: usize) !usize {
         }
     }
 
+    // Merge circuits that overlap
     var changed = true;
     while (changed) {
         const original_len = circuits.items.len;
@@ -178,21 +188,19 @@ fn part1(allocator: std.mem.Allocator, input: []const u8, pairs: usize) !usize {
         changed = circuits.items.len != original_len;
     }
 
+    // Sort circuits by size
     std.mem.sort(std.ArrayList(Coord), circuits.items, {}, compareCircuitSize);
 
-    std.debug.print("\nCircuits:\n", .{});
-    for (circuits.items) |circuit| {
-        std.debug.print("Circuit: ", .{});
-        for (circuit.items) |coord| {
-            std.debug.print("({s}) ", .{coord.str});
-        }
-        std.debug.print("\n", .{});
-    }
+    printCircuits(circuits);
 
+    // Calulate answer from largest 3 circuits
+    std.debug.print("{d} Largest circuit sizes: ", .{RELEVANT_CIRCUITS_CNT});
+    var sum: usize = 1;
     for (circuits.items[0..RELEVANT_CIRCUITS_CNT]) |circuit| {
-        std.debug.print("Circuit Size: {d}\n", .{circuit.items.len});
+        std.debug.print("{d} ", .{circuit.items.len});
         sum *= circuit.items.len;
     }
+    std.debug.print("\n", .{});
 
     return sum;
 }
