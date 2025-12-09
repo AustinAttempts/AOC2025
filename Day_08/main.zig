@@ -105,20 +105,26 @@ fn part1(allocator: std.mem.Allocator, input: []const u8, pairs: usize) !usize {
         try coords.append(allocator, coord);
     }
 
-    var coordMap = CoordMap.init(allocator);
-    defer coordMap.deinit();
+    var connections: std.ArrayList(Connection) = .empty;
+    defer connections.deinit(allocator);
 
     for (coords.items, 0..) |start, i| {
         for (coords.items[i + 1 ..]) |end| {
             const conn: Connection = Connection.init(start, end);
-            try coordMap.put(conn.dist, conn);
+            try connections.append(allocator, conn);
         }
     }
 
-    var distances: std.ArrayList(usize) = .empty;
-    defer distances.deinit(allocator);
-    try distances.appendSlice(allocator, coordMap.keys());
-    std.mem.sort(usize, distances.items, {}, std.sort.asc(usize));
+    std.debug.print("Total coordinates: {d}\n", .{coords.items.len});
+    std.debug.print("Total connections: {d}\n", .{connections.items.len});
+
+    // Sort ALL connections by distance
+    std.mem.sort(Connection, connections.items, {}, struct {
+        fn lessThan(context: void, a: Connection, b: Connection) bool {
+            _ = context;
+            return a.dist < b.dist;
+        }
+    }.lessThan);
 
     var circuits: std.ArrayList(std.ArrayList(Coord)) = .empty;
     defer {
@@ -129,16 +135,8 @@ fn part1(allocator: std.mem.Allocator, input: []const u8, pairs: usize) !usize {
     }
 
     for (0..pairs) |i| {
-        const conn = coordMap.get(distances.items[i]).?;
+        const conn = connections.items[i];
         std.debug.print("({s})<->({s}) = {d}\n", .{ conn.a.str, conn.b.str, conn.dist });
-
-        if (i == 0) {
-            var new_circuit: std.ArrayList(Coord) = .empty;
-            try new_circuit.append(allocator, conn.a);
-            try new_circuit.append(allocator, conn.b);
-            try circuits.append(allocator, new_circuit);
-            continue;
-        }
 
         var placed = false;
 
