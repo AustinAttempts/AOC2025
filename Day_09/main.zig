@@ -1,7 +1,6 @@
 const std = @import("std");
 
 const Coord = struct { x: usize, y: usize };
-
 const Rect = struct {
     a: Coord,
     b: Coord,
@@ -14,22 +13,6 @@ const Rect = struct {
         const height = @abs(@as(isize, @intCast(a.y)) - @as(isize, @intCast(b.y))) + 1;
         const area = width * height;
         return .{ .a = a, .b = b, .width = width, .height = height, .area = area };
-    }
-
-    fn validRect(self: *const Rect, floor: [][]u8) bool {
-        const x1 = @min(self.a.x, self.b.x);
-        const y1 = @min(self.a.y, self.b.y);
-        const x2 = @max(self.a.x, self.b.x);
-        const y2 = @max(self.a.y, self.b.y);
-
-        for (x1..x2 + 1) |x| {
-            if (floor[y1][x] == 'O' or floor[y2][x] == 'O') return false;
-        }
-
-        for (y1..y2 + 1) |y| {
-            if (floor[y][x1] == 'O' or floor[y][x2] == 'O') return false;
-        }
-        return true;
     }
 };
 
@@ -53,145 +36,6 @@ fn rectCmp(context: void, a: Rect, b: Rect) bool {
     return a.area > b.area;
 }
 
-fn drawPerimeter(allocator: std.mem.Allocator, floor: [][]u8, coords: []Coord) !void {
-    if (coords.len < 2) return;
-
-    // Find convex hull points
-    var hull = try convexHull(allocator, coords);
-    defer _ = hull.deinit(allocator);
-
-    // std.debug.print("Hull points: ", .{});
-    // for (hull.items) |point| {
-    //     std.debug.print("({d},{d}) ", .{ point.x, point.y });
-    // }
-    // std.debug.print("\n", .{});
-
-    // Draw lines between consecutive hull points
-    for (0..hull.items.len) |i| {
-        const p1 = hull.items[i];
-        const p2 = hull.items[(i + 1) % hull.items.len];
-        // std.debug.print("Drawing line from ({d},{d}) to ({d},{d})\n", .{ p1.x, p1.y, p2.x, p2.y });
-        drawLine(floor, p1, p2);
-    }
-}
-
-fn drawLine(floor: [][]u8, p1: Coord, p2: Coord) void {
-    const x1 = p1.x;
-    const x2 = p2.x;
-    const y1 = p1.y;
-    const y2 = p2.y;
-
-    if (y1 == y2) {
-        // Pure horizontal line
-        const start_x = @min(x1, x2);
-        const end_x = @max(x1, x2);
-        for (start_x..end_x + 1) |x| {
-            if (floor[y1][x] != '#') {
-                floor[y1][x] = 'X';
-            }
-        }
-    } else if (x1 == x2) {
-        // Pure vertical line
-        const start_y = @min(y1, y2);
-        const end_y = @max(y1, y2);
-        for (start_y..end_y + 1) |y| {
-            if (floor[y][x1] != '#') {
-                floor[y][x1] = 'X';
-            }
-        }
-    } else {
-        // Diagonal movement - determine order based on direction
-        // If moving right and up (x increases, y decreases): horizontal first
-        // If moving right and down (x increases, y increases): vertical first
-        // If moving left and up (x decreases, y decreases): vertical first
-        // If moving left and down (x decreases, y increases): horizontal first
-
-        const dx = @as(isize, @intCast(x2)) - @as(isize, @intCast(x1));
-        const dy = @as(isize, @intCast(y2)) - @as(isize, @intCast(y1));
-
-        if ((dx > 0 and dy < 0) or (dx < 0 and dy > 0)) {
-            // Horizontal first
-            const start_x = @min(x1, x2);
-            const end_x = @max(x1, x2);
-            for (start_x..end_x + 1) |x| {
-                if (floor[y1][x] != '#') {
-                    floor[y1][x] = 'X';
-                }
-            }
-
-            const start_y = @min(y1, y2);
-            const end_y = @max(y1, y2);
-            for (start_y..end_y + 1) |y| {
-                if (floor[y][x2] != '#') {
-                    floor[y][x2] = 'X';
-                }
-            }
-        } else {
-            // Vertical first
-            const start_y = @min(y1, y2);
-            const end_y = @max(y1, y2);
-            for (start_y..end_y + 1) |y| {
-                if (floor[y][x1] != '#') {
-                    floor[y][x1] = 'X';
-                }
-            }
-
-            const start_x = @min(x1, x2);
-            const end_x = @max(x1, x2);
-            for (start_x..end_x + 1) |x| {
-                if (floor[y2][x] != '#') {
-                    floor[y2][x] = 'X';
-                }
-            }
-        }
-    }
-}
-
-fn convexHull(allocator: std.mem.Allocator, coords: []Coord) !std.ArrayList(Coord) {
-    var hull = std.ArrayList(Coord).empty;
-
-    if (coords.len < 3) {
-        try hull.appendSlice(allocator, coords);
-        return hull;
-    }
-
-    // Find the leftmost point (and lowest if tied)
-    var leftmost: usize = 0;
-    for (coords, 0..) |coord, i| {
-        if (coord.x < coords[leftmost].x or
-            (coord.x == coords[leftmost].x and coord.y < coords[leftmost].y))
-        {
-            leftmost = i;
-        }
-    }
-
-    var current = leftmost;
-    while (true) {
-        try hull.append(allocator, coords[current]);
-        var next: usize = 0;
-
-        // Find the most counter-clockwise point from current
-        for (coords, 0..) |_, i| {
-            if (next == current) {
-                next = i;
-            } else {
-                const cross = crossProduct(coords[current], coords[i], coords[next]);
-                const dist_i = distance(coords[current], coords[i]);
-                const dist_next = distance(coords[current], coords[next]);
-
-                if (cross > 0 or (cross == 0 and dist_i > dist_next)) {
-                    next = i;
-                }
-            }
-        }
-
-        current = next;
-        if (current == leftmost) break;
-    }
-
-    return hull;
-}
-
 fn crossProduct(o: Coord, a: Coord, b: Coord) isize {
     const ox = @as(isize, @intCast(o.x));
     const oy = @as(isize, @intCast(o.y));
@@ -209,108 +53,29 @@ fn distance(a: Coord, b: Coord) usize {
     return @as(usize, @intCast(dx * dx + dy * dy));
 }
 
-fn floodFillOutside(allocator: std.mem.Allocator, floor: [][]u8, max_x: usize, max_y: usize) !void {
-    // Start from all edges of the grid and flood fill outward
-    // We'll use a queue-based flood fill (BFS)
-
-    var queue = std.ArrayList(Coord).empty;
-    defer _ = queue.deinit(allocator);
-
-    // Mark all edge cells as visited and add them to queue if they're empty
-    // Top and bottom edges
-    for (0..max_x) |x| {
-        if (floor[0][x] == '.') {
-            floor[0][x] = 'O';
-            try queue.append(allocator, .{ .x = x, .y = 0 });
-        }
-        if (floor[max_y - 1][x] == '.') {
-            floor[max_y - 1][x] = 'O';
-            try queue.append(allocator, .{ .x = x, .y = max_y - 1 });
-        }
-    }
-
-    // Left and right edges
-    for (0..max_y) |y| {
-        if (floor[y][0] == '.') {
-            floor[y][0] = 'O';
-            try queue.append(allocator, .{ .x = 0, .y = y });
-        }
-        if (floor[y][max_x - 1] == '.') {
-            floor[y][max_x - 1] = 'O';
-            try queue.append(allocator, .{ .x = max_x - 1, .y = y });
-        }
-    }
-
-    // BFS flood fill from all edge starting points
-    while (queue.items.len > 0) {
-        const current = queue.swapRemove(0);
-
-        // Check all 4 neighbors (up, down, left, right)
-        const neighbors = [_]struct { dx: isize, dy: isize }{
-            .{ .dx = 0, .dy = -1 }, // up
-            .{ .dx = 0, .dy = 1 }, // down
-            .{ .dx = -1, .dy = 0 }, // left
-            .{ .dx = 1, .dy = 0 }, // right
-        };
-
-        for (neighbors) |neighbor| {
-            const new_x = @as(isize, @intCast(current.x)) + neighbor.dx;
-            const new_y = @as(isize, @intCast(current.y)) + neighbor.dy;
-
-            // Check bounds
-            if (new_x >= 0 and new_x < @as(isize, @intCast(max_x)) and
-                new_y >= 0 and new_y < @as(isize, @intCast(max_y)))
-            {
-                const ux = @as(usize, @intCast(new_x));
-                const uy = @as(usize, @intCast(new_y));
-
-                // If it's empty space, mark it and add to queue
-                if (floor[uy][ux] == '.') {
-                    floor[uy][ux] = 'O';
-                    try queue.append(allocator, .{ .x = ux, .y = uy });
-                }
-            }
-        }
-    }
-}
-
-fn printFloor(floor: [][]u8, max_x: usize, max_y: usize) void {
-    for (0..max_y) |y| {
-        for (0..max_x) |x| {
-            std.debug.print("{c}", .{floor[y][x]});
-        }
-        std.debug.print("\n", .{});
-    }
-}
-
-fn printFloorToFile(allocator: std.mem.Allocator, floor: [][]u8, max_x: usize, max_y: usize, filename: []const u8) !void {
+fn outputPolygonToText(allocator: std.mem.Allocator, polygon: []const Coord, filename: []const u8) !void {
+    _ = allocator;
     const file = try std.fs.cwd().createFile(filename, .{});
     defer file.close();
 
-    // Build the entire string first
-    var buffer = std.ArrayList(u8).empty;
-    defer _ = buffer.deinit(allocator);
+    try file.writeAll("# Normalized Polygon Vertices (x,y)\n");
 
-    for (0..max_y) |y| {
-        for (0..max_x) |x| {
-            try buffer.append(allocator, floor[y][x]);
-        }
-        try buffer.append(allocator, '\n');
+    var buffer: [64]u8 = undefined;
+    for (polygon) |coord| {
+        const line_len = try std.fmt.bufPrint(&buffer, "{d},{d}\n", .{ coord.x, coord.y });
+        try file.writeAll(line_len);
     }
-
-    try file.writeAll(buffer.items);
 }
 
 fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
     var coords: std.ArrayList(Coord) = .empty;
     defer _ = coords.deinit(allocator);
-
     var lines = std.mem.splitScalar(u8, input, '\n');
     while (lines.next()) |line| {
+        if (line.len == 0) continue;
         var values = std.mem.splitScalar(u8, line, ',');
         const x = try std.fmt.parseInt(usize, values.next().?, 10);
         const y = try std.fmt.parseInt(usize, values.next().?, 10);
-
         const coord: Coord = .{ .x = x, .y = y };
         try coords.append(allocator, coord);
     }
@@ -323,7 +88,6 @@ fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
         for (coords.items[i + 1 ..]) |end| {
             const rect = Rect.init(start, end);
             try rectangles.append(allocator, rect);
-            std.debug.print("({d},{d}) - ({d},{d}) --> {d}\n", .{ rect.a.x, rect.a.y, rect.b.x, rect.b.y, rect.area });
             if (rect.area > max_area) {
                 max_area = rect.area;
             }
@@ -336,40 +100,54 @@ fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
 fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     var coords: std.ArrayList(Coord) = .empty;
     defer _ = coords.deinit(allocator);
-    var min_x: usize = std.math.maxInt(usize);
-    var min_y: usize = std.math.maxInt(usize);
-
     var lines = std.mem.splitScalar(u8, input, '\n');
     while (lines.next()) |line| {
+        if (line.len == 0) continue;
         var values = std.mem.splitScalar(u8, line, ',');
         const x = try std.fmt.parseInt(usize, values.next().?, 10);
         const y = try std.fmt.parseInt(usize, values.next().?, 10);
-        min_x = @min(min_x, x);
-        min_y = @min(min_y, y);
         const coord: Coord = .{ .x = x, .y = y };
         try coords.append(allocator, coord);
     }
 
-    // Normalize Coordinates
+    std.debug.print("Total coordinates: {d}\n", .{coords.items.len});
+
+    // Find min values for normalization
+    var min_x: usize = std.math.maxInt(usize);
+    var min_y: usize = std.math.maxInt(usize);
+    for (coords.items) |coord| {
+        min_x = @min(min_x, coord.x);
+        min_y = @min(min_y, coord.y);
+    }
+
+    // Normalize coordinates
     var coords_normed: std.ArrayList(Coord) = .empty;
     defer _ = coords_normed.deinit(allocator);
     for (coords.items) |coord| {
         try coords_normed.append(allocator, .{ .x = coord.x - min_x, .y = coord.y - min_y });
     }
 
-    // Find Normalized Bounds
+    std.debug.print("Normalized coordinates (offset by {d},{d})\n", .{ min_x, min_y });
+
+    // Find bounds after normalization
     var max_x: usize = 0;
     var max_y: usize = 0;
     for (coords_normed.items) |coord| {
-        max_x = @max(max_x, coord.x + 1);
-        max_y = @max(max_y, coord.y + 1);
+        max_x = @max(max_x, coord.x);
+        max_y = @max(max_y, coord.y);
     }
+    std.debug.print("Normalized bounds: {d} x {d}\n", .{ max_x, max_y });
 
-    std.debug.print("Grid dimensions: {d} x {d} = {d} total cells\n", .{ max_x, max_y, max_x * max_y });
-    std.debug.print("Number of coordinates: {d}\n", .{coords_normed.items.len});
+    // The simple_polygon is the ordered list of normalized coordinates (the boundary)
+    const simple_polygon = coords_normed.items;
+    std.debug.print("Polygon has {d} points\n", .{simple_polygon.len});
 
-    // Calulate All possible rectangles with normalized bounds
-    std.debug.print("Calculating and Sorting all possible Rectangles...\n", .{});
+    // Output vertices for visualization
+    try outputPolygonToText(allocator, simple_polygon, "polygon_vertices.csv");
+    std.debug.print("Polygon vertices written to polygon_vertices.csv\n", .{});
+
+    // Calculate all possible rectangles using normalized coordinates
+    std.debug.print("Calculating rectangles...\n", .{});
     var rects: std.ArrayList(Rect) = .empty;
     defer _ = rects.deinit(allocator);
 
@@ -381,49 +159,123 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
 
     // Sort rects in descending order by area
     std.mem.sort(Rect, rects.items, {}, rectCmp);
+    std.debug.print("Checking {d} rectangles...\n", .{rects.items.len});
 
-    // Make 2D Array of bounds
-    const floor = try allocator.alloc([]u8, max_y);
-    defer allocator.free(floor);
-    for (floor) |*x| {
-        x.* = try allocator.alloc(u8, max_x);
-    }
-    defer for (floor) |*x| {
-        allocator.free(x.*);
-    };
-
-    // Initialize
-    std.debug.print("Making and Initalizing Floor...\n", .{});
-    for (0..max_y) |y| {
-        for (0..max_x) |x| {
-            floor[y][x] = '.';
-        }
-    }
-
-    for (coords_normed.items) |coord| {
-        floor[coord.y][coord.x] = '#';
-    }
-
-    // Draw Perimeter
-    std.debug.print("Drawing Perimeter...\n", .{});
-    try drawPerimeter(allocator, floor, coords_normed.items);
-
-    // Flood Fill Outside
-    std.debug.print("Flood Filling Outside...\n", .{});
-    try floodFillOutside(allocator, floor, max_x, max_y);
-
-    // printFloor(floor, max_x, max_y);
-    // try printFloorToFile(allocator, floor, max_x, max_y, "floor_output.txt");
-
-    std.debug.print("Looking for largest valid rectangle...\n", .{});
+    // Check each rectangle to see if it's inside the simple polygon
+    var checked: usize = 0;
     for (rects.items) |rect| {
-        if (rect.validRect(floor)) {
+        checked += 1;
+        if (checked % 50 == 0) {
+            std.debug.print("Checked {d}/{d} rectangles...\n", .{ checked, rects.items.len });
+        }
+
+        if (rectangleInsideSimplePolygon(rect, simple_polygon)) {
             std.debug.print("Found valid rect: ({d},{d})-({d},{d}) area={d}\n", .{ rect.a.x, rect.a.y, rect.b.x, rect.b.y, rect.area });
             return rect.area;
         }
     }
 
+    std.debug.print("No valid rectangle found!\n", .{});
     return 0;
+}
+
+// Checks if a point is strictly inside the rectangle (excluding edges)
+fn isInsideInterior(p: Coord, r: Rect) bool {
+    const x1 = @min(r.a.x, r.b.x);
+    const y1 = @min(r.a.y, r.b.y);
+    const x2 = @max(r.a.x, r.b.x);
+    const y2 = @max(r.a.y, r.b.y);
+
+    return p.x > x1 and p.x < x2 and p.y > y1 and p.y < y2;
+}
+
+// Uses fast O(N) check for containment in a simple polygon.
+fn rectangleInsideSimplePolygon(rect: Rect, polygon: []const Coord) bool {
+    const x1 = @min(rect.a.x, rect.b.x);
+    const y1 = @min(rect.a.y, rect.b.y);
+    const x2 = @max(rect.a.x, rect.b.x);
+    const y2 = @max(rect.a.y, rect.b.y);
+
+    // 1. Check the four corners are inside or on the boundary of the polygon P. (O(N))
+    const corner_tl: Coord = .{ .x = x1, .y = y1 };
+    const corner_tr: Coord = .{ .x = x2, .y = y1 };
+    const corner_bl: Coord = .{ .x = x1, .y = y2 };
+    const corner_br: Coord = .{ .x = x2, .y = y2 };
+
+    if (!pointInsideSimplePolygon(corner_tl, polygon)) return false;
+    if (!pointInsideSimplePolygon(corner_tr, polygon)) return false;
+    if (!pointInsideSimplePolygon(corner_bl, polygon)) return false;
+    if (!pointInsideSimplePolygon(corner_br, polygon)) return false;
+
+    // 2. Check that no polygon vertex P is strictly inside the interior of the rectangle R. (O(N))
+    // This correctly handles concave notches cutting across the rectangle's middle.
+    for (polygon) |p| {
+        if (isInsideInterior(p, rect)) {
+            return false;
+        }
+    }
+
+    // 3. Check all left and right edges to verify that no edge exists the polygon
+    for (y1..y2 + 1) |y| {
+        if (!pointInsideSimplePolygon(.{ .x = x1, .y = y }, polygon)) return false;
+        if (!pointInsideSimplePolygon(.{ .x = x2, .y = y }, polygon)) return false;
+    }
+
+    // 4. Check all top and bottom edges to verify that no edge exists the polygon
+    for (x1..x2 + 1) |x| {
+        if (!pointInsideSimplePolygon(.{ .x = x, .y = y1 }, polygon)) return false;
+        if (!pointInsideSimplePolygon(.{ .x = x, .y = y2 }, polygon)) return false;
+    }
+
+    return true;
+}
+
+// Uses Winding Number Algorithm for simple or non-simple polygons (including those with holes)
+fn pointInsideSimplePolygon(point: Coord, polygon: []const Coord) bool {
+    const px = @as(isize, @intCast(point.x));
+    const py = @as(isize, @intCast(point.y));
+
+    var wn: isize = 0; // Winding number counter
+
+    for (0..polygon.len) |i| {
+        const p1 = polygon[i];
+        const p2 = polygon[(i + 1) % polygon.len];
+
+        const x1 = @as(isize, @intCast(p1.x));
+        const y1 = @as(isize, @intCast(p1.y));
+        const x2 = @as(isize, @intCast(p2.x));
+        const y2 = @as(isize, @intCast(p2.y));
+
+        // Edge case 1: Check if point is on the boundary (robust, kept from previous version)
+        const cross_boundary_check = crossProduct(p1, p2, point);
+        if (cross_boundary_check == 0) {
+            const dot_product = (px - x1) * (x2 - x1) + (py - y1) * (y2 - y1);
+            if (dot_product >= 0) {
+                const dp_u = @as(usize, @intCast(dot_product));
+                if (dp_u <= distance(p1, p2)) {
+                    return true; // Point is on an edge
+                }
+            }
+        }
+
+        // Winding Number Algorithm: Check for crossings
+        if (y1 <= py) { // P1 is below or on the ray
+            if (y2 > py) { // P2 is above the ray (Upward crossing)
+                if (cross_boundary_check > 0) {
+                    wn += 1; // Increment Winding Number
+                }
+            }
+        } else { // P1 is above the ray (y1 > py)
+            if (y2 <= py) { // P2 is below or on the ray (Downward crossing)
+                if (cross_boundary_check < 0) {
+                    wn -= 1; // Decrement Winding Number
+                }
+            }
+        }
+    }
+
+    // Point is inside if the winding number is non-zero
+    return wn != 0;
 }
 
 test "part 1" {
