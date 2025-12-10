@@ -16,15 +16,22 @@ const Rect = struct {
         return .{ .a = a, .b = b, .width = width, .height = height, .area = area };
     }
 
-    // fn valid_rect(self: *Rect) !bool {
-    //     //TODO
-    // }
-};
+    fn validRect(self: *const Rect, floor: [][]u8) bool {
+        const x1 = @min(self.a.x, self.b.x);
+        const y1 = @min(self.a.y, self.b.y);
+        const x2 = @max(self.a.x, self.b.x);
+        const y2 = @max(self.a.y, self.b.y);
 
-fn rectCmp(context: void, a: Rect, b: Rect) bool {
-    _ = context;
-    return a.area < b.area;
-}
+        for (x1..x2 + 1) |x| {
+            if (floor[y1][x] == 'O' or floor[y2][x] == 'O') return false;
+        }
+
+        for (y1..y2 + 1) |y| {
+            if (floor[y][x1] == 'O' or floor[y][x2] == 'O') return false;
+        }
+        return true;
+    }
+};
 
 pub fn main() !void {
     var timer = try std.time.Timer.start();
@@ -41,45 +48,100 @@ pub fn main() !void {
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
 }
 
-fn drawPerimeter(allocator: std.mem.Allocator, floor: [][]u8, coords: []Coord, max_x: usize, max_y: usize) !void {
-    _ = max_x;
-    _ = max_y;
+fn rectCmp(context: void, a: Rect, b: Rect) bool {
+    _ = context;
+    return a.area > b.area;
+}
 
+fn drawPerimeter(allocator: std.mem.Allocator, floor: [][]u8, coords: []Coord) !void {
     if (coords.len < 2) return;
 
     // Find convex hull points
     var hull = try convexHull(allocator, coords);
     defer _ = hull.deinit(allocator);
 
+    // std.debug.print("Hull points: ", .{});
+    // for (hull.items) |point| {
+    //     std.debug.print("({d},{d}) ", .{ point.x, point.y });
+    // }
+    // std.debug.print("\n", .{});
+
     // Draw lines between consecutive hull points
     for (0..hull.items.len) |i| {
         const p1 = hull.items[i];
         const p2 = hull.items[(i + 1) % hull.items.len];
-        drawLine(floor, p1.x, p1.y, p2.x, p2.y);
+        // std.debug.print("Drawing line from ({d},{d}) to ({d},{d})\n", .{ p1.x, p1.y, p2.x, p2.y });
+        drawLine(floor, p1, p2);
     }
 }
 
-fn drawLine(floor: [][]u8, x1: usize, y1: usize, x2: usize, y2: usize) void {
-    // Draw horizontal line first (if needed)
-    if (x1 != x2) {
+fn drawLine(floor: [][]u8, p1: Coord, p2: Coord) void {
+    const x1 = p1.x;
+    const x2 = p2.x;
+    const y1 = p1.y;
+    const y2 = p2.y;
+
+    if (y1 == y2) {
+        // Pure horizontal line
         const start_x = @min(x1, x2);
         const end_x = @max(x1, x2);
         for (start_x..end_x + 1) |x| {
-            // Only mark with X if it's not already a #
             if (floor[y1][x] != '#') {
                 floor[y1][x] = 'X';
             }
         }
-    }
-
-    // Then draw vertical line (if needed)
-    if (y1 != y2) {
+    } else if (x1 == x2) {
+        // Pure vertical line
         const start_y = @min(y1, y2);
         const end_y = @max(y1, y2);
         for (start_y..end_y + 1) |y| {
-            // Only mark with X if it's not already a #
-            if (floor[y][x2] != '#') {
-                floor[y][x2] = 'X';
+            if (floor[y][x1] != '#') {
+                floor[y][x1] = 'X';
+            }
+        }
+    } else {
+        // Diagonal movement - determine order based on direction
+        // If moving right and up (x increases, y decreases): horizontal first
+        // If moving right and down (x increases, y increases): vertical first
+        // If moving left and up (x decreases, y decreases): vertical first
+        // If moving left and down (x decreases, y increases): horizontal first
+
+        const dx = @as(isize, @intCast(x2)) - @as(isize, @intCast(x1));
+        const dy = @as(isize, @intCast(y2)) - @as(isize, @intCast(y1));
+
+        if ((dx > 0 and dy < 0) or (dx < 0 and dy > 0)) {
+            // Horizontal first
+            const start_x = @min(x1, x2);
+            const end_x = @max(x1, x2);
+            for (start_x..end_x + 1) |x| {
+                if (floor[y1][x] != '#') {
+                    floor[y1][x] = 'X';
+                }
+            }
+
+            const start_y = @min(y1, y2);
+            const end_y = @max(y1, y2);
+            for (start_y..end_y + 1) |y| {
+                if (floor[y][x2] != '#') {
+                    floor[y][x2] = 'X';
+                }
+            }
+        } else {
+            // Vertical first
+            const start_y = @min(y1, y2);
+            const end_y = @max(y1, y2);
+            for (start_y..end_y + 1) |y| {
+                if (floor[y][x1] != '#') {
+                    floor[y][x1] = 'X';
+                }
+            }
+
+            const start_x = @min(x1, x2);
+            const end_x = @max(x1, x2);
+            for (start_x..end_x + 1) |x| {
+                if (floor[y2][x] != '#') {
+                    floor[y2][x] = 'X';
+                }
             }
         }
     }
@@ -147,6 +209,71 @@ fn distance(a: Coord, b: Coord) usize {
     return @as(usize, @intCast(dx * dx + dy * dy));
 }
 
+fn floodFillOutside(floor: [][]u8, max_x: usize, max_y: usize) void {
+    // Start from all edges of the grid and flood fill outward
+    // We'll use a queue-based flood fill (BFS)
+
+    var queue = std.ArrayList(Coord).empty;
+    defer _ = queue.deinit(std.heap.page_allocator);
+
+    // Mark all edge cells as visited and add them to queue if they're empty
+    // Top and bottom edges
+    for (0..max_x) |x| {
+        if (floor[0][x] == '.') {
+            floor[0][x] = 'O';
+            queue.append(std.heap.page_allocator, .{ .x = x, .y = 0 }) catch {};
+        }
+        if (floor[max_y - 1][x] == '.') {
+            floor[max_y - 1][x] = 'O';
+            queue.append(std.heap.page_allocator, .{ .x = x, .y = max_y - 1 }) catch {};
+        }
+    }
+
+    // Left and right edges
+    for (0..max_y) |y| {
+        if (floor[y][0] == '.') {
+            floor[y][0] = 'O';
+            queue.append(std.heap.page_allocator, .{ .x = 0, .y = y }) catch {};
+        }
+        if (floor[y][max_x - 1] == '.') {
+            floor[y][max_x - 1] = 'O';
+            queue.append(std.heap.page_allocator, .{ .x = max_x - 1, .y = y }) catch {};
+        }
+    }
+
+    // BFS flood fill from all edge starting points
+    while (queue.items.len > 0) {
+        const current = queue.orderedRemove(0);
+
+        // Check all 4 neighbors (up, down, left, right)
+        const neighbors = [_]struct { dx: isize, dy: isize }{
+            .{ .dx = 0, .dy = -1 }, // up
+            .{ .dx = 0, .dy = 1 }, // down
+            .{ .dx = -1, .dy = 0 }, // left
+            .{ .dx = 1, .dy = 0 }, // right
+        };
+
+        for (neighbors) |neighbor| {
+            const new_x = @as(isize, @intCast(current.x)) + neighbor.dx;
+            const new_y = @as(isize, @intCast(current.y)) + neighbor.dy;
+
+            // Check bounds
+            if (new_x >= 0 and new_x < @as(isize, @intCast(max_x)) and
+                new_y >= 0 and new_y < @as(isize, @intCast(max_y)))
+            {
+                const ux = @as(usize, @intCast(new_x));
+                const uy = @as(usize, @intCast(new_y));
+
+                // If it's empty space, mark it and add to queue
+                if (floor[uy][ux] == '.') {
+                    floor[uy][ux] = 'O';
+                    queue.append(std.heap.page_allocator, .{ .x = ux, .y = uy }) catch {};
+                }
+            }
+        }
+    }
+}
+
 fn printFloor(floor: [][]u8, max_x: usize, max_y: usize) void {
     for (0..max_y) |y| {
         for (0..max_x) |x| {
@@ -212,12 +339,6 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
         try coords_normed.append(allocator, .{ .x = coord.x - min_x, .y = coord.y - min_y });
     }
 
-    for (0..coords.items.len) |i| {
-        const coord = coords.items[i];
-        const coord_normed = coords_normed.items[i];
-        std.debug.print("({d},{d}) --> ({d},{d})\n", .{ coord.x, coord.y, coord_normed.x, coord_normed.y });
-    }
-
     // Find Normalized Bounds
     var max_x: usize = 0;
     var max_y: usize = 0;
@@ -227,6 +348,7 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     }
 
     // Calulate All possible rectangles with normalized bounds
+    std.debug.print("Calculating and Sorting all possible Rectangles...\n", .{});
     var rects: std.ArrayList(Rect) = .empty;
     defer _ = rects.deinit(allocator);
 
@@ -250,9 +372,10 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     };
 
     // Initialize
+    std.debug.print("Making and Initalizing Floor...\n", .{});
     for (0..max_y) |y| {
         for (0..max_x) |x| {
-            floor[y][x] = ' ';
+            floor[y][x] = '.';
         }
     }
 
@@ -261,9 +384,22 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     }
 
     // Draw Perimeter
-    try drawPerimeter(allocator, floor, coords_normed.items, max_x, max_y);
+    std.debug.print("Drawing Perimeter...\n", .{});
+    try drawPerimeter(allocator, floor, coords_normed.items);
 
-    printFloor(floor, max_x, max_y);
+    // Flood Fill Outside
+    std.debug.print("Flood Filling Outside...\n", .{});
+    floodFillOutside(floor, max_x, max_y);
+
+    // printFloor(floor, max_x, max_y);
+
+    std.debug.print("Looking for largest valid rectangle...\n", .{});
+    for (rects.items) |rect| {
+        if (rect.validRect(floor)) {
+            std.debug.print("Found valid rect: ({d},{d})-({d},{d}) area={d}\n", .{ rect.a.x, rect.a.y, rect.b.x, rect.b.y, rect.area });
+            return rect.area;
+        }
+    }
 
     return 0;
 }
