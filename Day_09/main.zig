@@ -365,6 +365,9 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
         max_y = @max(max_y, coord.y + 1);
     }
 
+    std.debug.print("Grid dimensions: {d} x {d} = {d} total cells\n", .{ max_x, max_y, max_x * max_y });
+    std.debug.print("Number of coordinates: {d}\n", .{coords_normed.items.len});
+
     // Calulate All possible rectangles with normalized bounds
     std.debug.print("Calculating and Sorting all possible Rectangles...\n", .{});
     var rects: std.ArrayList(Rect) = .empty;
@@ -410,7 +413,7 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     try floodFillOutside(allocator, floor, max_x, max_y);
 
     // printFloor(floor, max_x, max_y);
-    try printFloorToFile(allocator, floor, max_x, max_y, "floor_output.txt");
+    // try printFloorToFile(allocator, floor, max_x, max_y, "floor_output.txt");
 
     std.debug.print("Looking for largest valid rectangle...\n", .{});
     for (rects.items) |rect| {
