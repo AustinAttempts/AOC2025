@@ -16,11 +16,25 @@ const Rect = struct {
         return .{ .a = a, .b = b, .width = width, .height = height, .area = area };
     }
 
-    fn valid_rect(self: *Rect, coord_set: std.AutoHashMap(Coord, u8)) bool {
-        for (@min(self.a.x, self.b.x)..@max(self.a.x, self.b.x) + 1) |x| {
-            for (@min(self.a.y, self.b.y)..@max(self.a.y, self.b.y) + 1) |y| {
-                const val = coord_set.get(.{ .x = x, .y = y }) orelse continue;
-                if (val == 'O') return false;
+    fn valid_rect(self: *Rect, coord_set: std.AutoHashMap(Coord, u8), max_x: usize) bool {
+        const min_x = @min(self.a.x, self.b.x);
+        const max_x_rect = @max(self.a.x, self.b.x);
+        const min_y = @min(self.a.y, self.b.y);
+        const max_y = @max(self.a.y, self.b.y);
+
+        // Check top and bottom edges
+        if (min_x + 1 < max_x_rect) {
+            for (min_x..max_x_rect + 1) |x| {
+                if (!isInsideOrOnBoundary(.{ .x = x, .y = min_y }, coord_set, max_x)) return false;
+                if (!isInsideOrOnBoundary(.{ .x = x, .y = max_y }, coord_set, max_x)) return false;
+            }
+        }
+
+        // Check left and right edges (excluding corners to avoid double-checking)
+        if (min_y + 1 < max_y) {
+            for (min_y + 1..max_y) |y| {
+                if (!isInsideOrOnBoundary(.{ .x = min_x, .y = y }, coord_set, max_x)) return false;
+                if (!isInsideOrOnBoundary(.{ .x = max_x_rect, .y = y }, coord_set, max_x)) return false;
             }
         }
         return true;
@@ -50,6 +64,32 @@ fn compareByX(context: void, a: Coord, b: Coord) bool {
 fn compareByY(context: void, a: Coord, b: Coord) bool {
     _ = context;
     return a.y < b.y;
+}
+
+fn isInside(coord: Coord, coord_set: std.AutoHashMap(Coord, u8), max_x: usize) bool {
+    var crossings: usize = 0;
+
+    // Cast ray to the right from this point, count perimeter crossings
+    var x = coord.x + 1;
+    while (x <= max_x) : (x += 1) {
+        const val = coord_set.get(.{ .x = x, .y = coord.y }) orelse continue;
+        if (val == '#' or val == 'X') {
+            crossings += 1;
+        }
+    }
+
+    // Odd number of crossings = inside, even = outside
+    return crossings % 2 == 1;
+}
+
+fn isInsideOrOnBoundary(coord: Coord, coord_set: std.AutoHashMap(Coord, u8), max_x: usize) bool {
+    // If on the perimeter, it's valid
+    if (coord_set.get(coord)) |val| {
+        if (val == '#' or val == 'X') return true;
+    }
+
+    // Otherwise check if inside
+    return isInside(coord, coord_set, max_x);
 }
 
 fn printMap(coord_set: *std.AutoHashMap(Coord, u8), min_y: usize, max_y: usize, min_x: usize, max_x: usize) !void {
@@ -99,8 +139,6 @@ fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
 fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     var coords: std.ArrayList(Coord) = .empty;
     defer _ = coords.deinit(allocator);
-    var coord_set = std.AutoHashMap(Coord, u8).init(allocator);
-    defer _ = coord_set.deinit();
 
     var lines = std.mem.splitScalar(u8, input, '\n');
     while (lines.next()) |line| {
@@ -110,6 +148,25 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
 
         const coord: Coord = .{ .x = x, .y = y };
         try coords.append(allocator, coord);
+    }
+
+    // Find min values
+    var min_x: usize = std.math.maxInt(usize);
+    var min_y: usize = std.math.maxInt(usize);
+    for (coords.items) |coord| {
+        min_x = @min(min_x, coord.x);
+        min_y = @min(min_y, coord.y);
+    }
+
+    // Normalize all coordinates
+    for (coords.items) |*coord| {
+        coord.x -= min_x;
+        coord.y -= min_y;
+    }
+
+    var coord_set = std.AutoHashMap(Coord, u8).init(allocator);
+    defer _ = coord_set.deinit();
+    for (coords.items) |coord| {
         try coord_set.put(coord, '#');
     }
 
@@ -132,8 +189,8 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
         compareByY,
     );
 
-    const min_x = sorted_x.items[0].x;
-    const min_y = sorted_y.items[0].y;
+    min_x = sorted_x.items[0].x;
+    min_y = sorted_y.items[0].y;
     const max_x = sorted_x.items[sorted_x.items.len - 1].x;
     const max_y = sorted_y.items[sorted_y.items.len - 1].y;
 
@@ -168,68 +225,13 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
 
     // try printMap(&coord_set, min_y, max_y, min_x, max_x);
 
-    // Flood Fill outide of perimeter
-    std.debug.print("Flood Filling Outside...\n", .{});
-    var to_visit: std.ArrayList(Coord) = .empty;
-    defer _ = to_visit.deinit(allocator);
-
-    // Start from all edge coordinates
-    for (min_x..max_x + 1) |x| {
-        try to_visit.append(allocator, .{ .x = x, .y = min_y });
-        try to_visit.append(allocator, .{ .x = x, .y = max_y });
-    }
-    for (min_y..max_y + 1) |y| {
-        try to_visit.append(allocator, .{ .x = min_x, .y = y });
-        try to_visit.append(allocator, .{ .x = max_x, .y = y });
-    }
-
-    // Flood fill to mark outside
-    while (to_visit.items.len > 0) {
-        const current = to_visit.pop().?;
-
-        // Check if already visited or blocked
-        if (coord_set.get(current)) |entry| {
-            if (entry == 'O' or entry == '#' or entry == 'X') continue;
-        }
-
-        try coord_set.put(current, 'O'); // Mark as outside
-
-        // Add neighbors - only if not already marked
-        if (current.x > min_x) {
-            const next = Coord{ .x = current.x - 1, .y = current.y };
-            if (coord_set.get(next) == null or coord_set.get(next).? == '.') {
-                try to_visit.append(allocator, next);
-            }
-        }
-        if (current.x < max_x) {
-            const next = Coord{ .x = current.x + 1, .y = current.y };
-            if (coord_set.get(next) == null or coord_set.get(next).? == '.') {
-                try to_visit.append(allocator, next);
-            }
-        }
-        if (current.y > min_y) {
-            const next = Coord{ .x = current.x, .y = current.y - 1 };
-            if (coord_set.get(next) == null or coord_set.get(next).? == '.') {
-                try to_visit.append(allocator, next);
-            }
-        }
-        if (current.y < max_y) {
-            const next = Coord{ .x = current.x, .y = current.y + 1 };
-            if (coord_set.get(next) == null or coord_set.get(next).? == '.') {
-                try to_visit.append(allocator, next);
-            }
-        }
-    }
-
-    // try printMap(&coord_set, min_y, max_y, min_x, max_x);
-
     std.debug.print("Finding Valid Rectangles...\n", .{});
     // Find valid rectangles
     var max_area: usize = 0;
     for (coords.items, 0..) |start, i| {
         for (coords.items[i + 1 ..]) |end| {
             var rect = Rect.init(start, end);
-            if (!rect.valid_rect(coord_set)) continue;
+            if (!rect.valid_rect(coord_set, max_x)) continue;
             std.debug.print("({d},{d}) - ({d},{d}) --> {d}\n", .{ rect.a.x, rect.a.y, rect.b.x, rect.b.y, rect.area });
             if (rect.area > max_area) {
                 max_area = rect.area;
