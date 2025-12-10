@@ -283,6 +283,24 @@ fn printFloor(floor: [][]u8, max_x: usize, max_y: usize) void {
     }
 }
 
+fn printFloorToFile(allocator: std.mem.Allocator, floor: [][]u8, max_x: usize, max_y: usize, filename: []const u8) !void {
+    const file = try std.fs.cwd().createFile(filename, .{});
+    defer file.close();
+
+    // Build the entire string first
+    var buffer = std.ArrayList(u8).empty;
+    defer _ = buffer.deinit(allocator);
+
+    for (0..max_y) |y| {
+        for (0..max_x) |x| {
+            try buffer.append(allocator, floor[y][x]);
+        }
+        try buffer.append(allocator, '\n');
+    }
+
+    try file.writeAll(buffer.items);
+}
+
 fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
     var coords: std.ArrayList(Coord) = .empty;
     defer _ = coords.deinit(allocator);
@@ -392,6 +410,7 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     try floodFillOutside(allocator, floor, max_x, max_y);
 
     // printFloor(floor, max_x, max_y);
+    try printFloorToFile(allocator, floor, max_x, max_y, "floor_output.txt");
 
     std.debug.print("Looking for largest valid rectangle...\n", .{});
     for (rects.items) |rect| {
