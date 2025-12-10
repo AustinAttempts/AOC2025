@@ -209,23 +209,23 @@ fn distance(a: Coord, b: Coord) usize {
     return @as(usize, @intCast(dx * dx + dy * dy));
 }
 
-fn floodFillOutside(floor: [][]u8, max_x: usize, max_y: usize) void {
+fn floodFillOutside(allocator: std.mem.Allocator, floor: [][]u8, max_x: usize, max_y: usize) !void {
     // Start from all edges of the grid and flood fill outward
     // We'll use a queue-based flood fill (BFS)
 
     var queue = std.ArrayList(Coord).empty;
-    defer _ = queue.deinit(std.heap.page_allocator);
+    defer _ = queue.deinit(allocator);
 
     // Mark all edge cells as visited and add them to queue if they're empty
     // Top and bottom edges
     for (0..max_x) |x| {
         if (floor[0][x] == '.') {
             floor[0][x] = 'O';
-            queue.append(std.heap.page_allocator, .{ .x = x, .y = 0 }) catch {};
+            try queue.append(allocator, .{ .x = x, .y = 0 });
         }
         if (floor[max_y - 1][x] == '.') {
             floor[max_y - 1][x] = 'O';
-            queue.append(std.heap.page_allocator, .{ .x = x, .y = max_y - 1 }) catch {};
+            try queue.append(allocator, .{ .x = x, .y = max_y - 1 });
         }
     }
 
@@ -233,17 +233,17 @@ fn floodFillOutside(floor: [][]u8, max_x: usize, max_y: usize) void {
     for (0..max_y) |y| {
         if (floor[y][0] == '.') {
             floor[y][0] = 'O';
-            queue.append(std.heap.page_allocator, .{ .x = 0, .y = y }) catch {};
+            try queue.append(allocator, .{ .x = 0, .y = y });
         }
         if (floor[y][max_x - 1] == '.') {
             floor[y][max_x - 1] = 'O';
-            queue.append(std.heap.page_allocator, .{ .x = max_x - 1, .y = y }) catch {};
+            try queue.append(allocator, .{ .x = max_x - 1, .y = y });
         }
     }
 
     // BFS flood fill from all edge starting points
     while (queue.items.len > 0) {
-        const current = queue.orderedRemove(0);
+        const current = queue.swapRemove(0);
 
         // Check all 4 neighbors (up, down, left, right)
         const neighbors = [_]struct { dx: isize, dy: isize }{
@@ -267,7 +267,7 @@ fn floodFillOutside(floor: [][]u8, max_x: usize, max_y: usize) void {
                 // If it's empty space, mark it and add to queue
                 if (floor[uy][ux] == '.') {
                     floor[uy][ux] = 'O';
-                    queue.append(std.heap.page_allocator, .{ .x = ux, .y = uy }) catch {};
+                    try queue.append(allocator, .{ .x = ux, .y = uy });
                 }
             }
         }
@@ -389,7 +389,7 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
 
     // Flood Fill Outside
     std.debug.print("Flood Filling Outside...\n", .{});
-    floodFillOutside(floor, max_x, max_y);
+    try floodFillOutside(allocator, floor, max_x, max_y);
 
     // printFloor(floor, max_x, max_y);
 
