@@ -16,7 +16,7 @@ const Rect = struct {
         return .{ .a = a, .b = b, .width = width, .height = height, .area = area };
     }
 
-    fn valid_rect(self: *Rect, coord_set: std.AutoHashMap(Coord, u8), max_x: usize) bool {
+    fn valid_rect(self: *Rect, coord_set: std.AutoHashMap(Coord, u8), max_x: usize, cache: *std.AutoHashMap(Coord, bool)) !bool {
         const min_x = @min(self.a.x, self.b.x);
         const max_x_rect = @max(self.a.x, self.b.x);
         const min_y = @min(self.a.y, self.b.y);
@@ -25,16 +25,16 @@ const Rect = struct {
         // Check top and bottom edges
         if (min_x + 1 < max_x_rect) {
             for (min_x..max_x_rect + 1) |x| {
-                if (!isInsideOrOnBoundary(.{ .x = x, .y = min_y }, coord_set, max_x)) return false;
-                if (!isInsideOrOnBoundary(.{ .x = x, .y = max_y }, coord_set, max_x)) return false;
+                if (!try isInsideOrOnBoundaryCached(.{ .x = x, .y = min_y }, coord_set, max_x, cache)) return false;
+                if (!try isInsideOrOnBoundaryCached(.{ .x = x, .y = max_y }, coord_set, max_x, cache)) return false;
             }
         }
 
-        // Check left and right edges (excluding corners to avoid double-checking)
+        // Check left and right edges
         if (min_y + 1 < max_y) {
             for (min_y + 1..max_y) |y| {
-                if (!isInsideOrOnBoundary(.{ .x = min_x, .y = y }, coord_set, max_x)) return false;
-                if (!isInsideOrOnBoundary(.{ .x = max_x_rect, .y = y }, coord_set, max_x)) return false;
+                if (!try isInsideOrOnBoundaryCached(.{ .x = min_x, .y = y }, coord_set, max_x, cache)) return false;
+                if (!try isInsideOrOnBoundaryCached(.{ .x = max_x_rect, .y = y }, coord_set, max_x, cache)) return false;
             }
         }
         return true;
@@ -82,14 +82,21 @@ fn isInside(coord: Coord, coord_set: std.AutoHashMap(Coord, u8), max_x: usize) b
     return crossings % 2 == 1;
 }
 
-fn isInsideOrOnBoundary(coord: Coord, coord_set: std.AutoHashMap(Coord, u8), max_x: usize) bool {
+fn isInsideOrOnBoundaryCached(coord: Coord, coord_set: std.AutoHashMap(Coord, u8), max_x: usize, cache: *std.AutoHashMap(Coord, bool)) !bool {
     // If on the perimeter, it's valid
     if (coord_set.get(coord)) |val| {
         if (val == '#' or val == 'X') return true;
     }
 
-    // Otherwise check if inside
-    return isInside(coord, coord_set, max_x);
+    // Check cache first
+    if (cache.get(coord)) |result| {
+        return result;
+    }
+
+    // Calculate and cache result
+    const result = isInside(coord, coord_set, max_x);
+    try cache.put(coord, result);
+    return result;
 }
 
 fn printMap(coord_set: *std.AutoHashMap(Coord, u8), min_y: usize, max_y: usize, min_x: usize, max_x: usize) !void {
@@ -228,10 +235,12 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     std.debug.print("Finding Valid Rectangles...\n", .{});
     // Find valid rectangles
     var max_area: usize = 0;
+    var inside_cache = std.AutoHashMap(Coord, bool).init(allocator);
+    defer inside_cache.deinit();
     for (coords.items, 0..) |start, i| {
         for (coords.items[i + 1 ..]) |end| {
             var rect = Rect.init(start, end);
-            if (!rect.valid_rect(coord_set, max_x)) continue;
+            if (!try rect.valid_rect(coord_set, max_x, &inside_cache)) continue;
             std.debug.print("({d},{d}) - ({d},{d}) --> {d}\n", .{ rect.a.x, rect.a.y, rect.b.x, rect.b.y, rect.area });
             if (rect.area > max_area) {
                 max_area = rect.area;
