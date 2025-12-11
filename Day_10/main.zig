@@ -20,6 +20,50 @@ const Machine = struct {
         }
         std.debug.print("\tJoltage = {s}\n", .{self.joltage});
     }
+
+    fn findMinPresses(self: Machine, allocator: std.mem.Allocator) !?usize {
+        // BFS state: (current_value, num_presses)
+        const State = struct {
+            value: u8,
+            presses: usize,
+        };
+
+        var queue: std.ArrayList(State) = .empty;
+        defer queue.deinit(allocator);
+
+        var visited = std.AutoHashMap(u8, void).init(allocator);
+        defer visited.deinit();
+
+        // Start at 0 with 0 presses
+        try queue.append(allocator, .{ .value = 0, .presses = 0 });
+        try visited.put(0, {});
+
+        while (queue.items.len > 0) {
+            const current = queue.orderedRemove(0);
+
+            // Check if we've reached the key
+            if (current.value == self.key) {
+                return current.presses;
+            }
+
+            // Try pressing each switch
+            for (self.switches) |sw| {
+                const next_value = current.value ^ sw;
+
+                // If we haven't visited this state, add it to the queue
+                if (!visited.contains(next_value)) {
+                    try visited.put(next_value, {});
+                    try queue.append(allocator, .{
+                        .value = next_value,
+                        .presses = current.presses + 1,
+                    });
+                }
+            }
+        }
+
+        // No solution found
+        return null;
+    }
 };
 
 pub fn main() !void {
@@ -87,7 +131,19 @@ fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
         machine.printMachine();
     }
 
-    return 0;
+    // Find minimum presses for all machines and sum them up
+    var total_presses: usize = 0;
+    for (machines.items) |machine| {
+        if (try machine.findMinPresses(allocator)) |presses| {
+            std.debug.print("Min presses for this machine: {d}\n", .{presses});
+            total_presses += presses;
+        } else {
+            std.debug.print("No solution found for this machine!\n", .{});
+            return error.NoSolution;
+        }
+    }
+
+    return total_presses;
 }
 
 test "part 1" {
