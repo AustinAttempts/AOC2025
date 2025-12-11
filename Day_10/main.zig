@@ -164,113 +164,113 @@ const Machine = struct {
         return null;
     }
 
-    fn solveLinearSystem(self: Machine, allocator: std.mem.Allocator) !?[]usize {
-        const n_switches = self.switches.len;
-        const n_lights = self.joltage.len;
+    fn findMinPressesForJoltage(self: Machine, allocator: std.mem.Allocator) !?usize {
+        const State = struct {
+            counters: []usize,
+            presses: usize,
 
-        // Create augmented matrix [A^T | b]
-        // We transpose because switches[i] represents column i in the matrix
-        var matrix = try allocator.alloc([]f64, n_lights);
+            fn hash(s: @This()) u64 {
+                var hasher = std.hash.Wyhash.init(0);
+                hasher.update(std.mem.sliceAsBytes(s.counters));
+                return hasher.final();
+            }
+
+            fn eql(a: @This(), b: @This()) bool {
+                return std.mem.eql(usize, a.counters, b.counters);
+            }
+        };
+
+        const HashContext = struct {
+            pub fn hash(_: @This(), s: State) u64 {
+                return s.hash();
+            }
+            pub fn eql(_: @This(), a: State, b: State) bool {
+                return a.eql(b);
+            }
+        };
+
+        var queue: std.ArrayList(State) = .empty;
         defer {
-            for (matrix) |row| allocator.free(row);
-            allocator.free(matrix);
-        }
-
-        for (0..n_lights) |i| {
-            matrix[i] = try allocator.alloc(f64, n_switches + 1);
-            // Copy switch values (transposed)
-            for (0..n_switches) |j| {
-                matrix[i][j] = @floatFromInt(self.switches[j][i]);
+            for (queue.items) |state| {
+                allocator.free(state.counters);
             }
-            // Add target value (joltage)
-            matrix[i][n_switches] = @floatFromInt(self.joltage[i]);
+            queue.deinit(allocator);
         }
 
-        // Gaussian elimination with partial pivoting
-        for (0..@min(n_lights, n_switches)) |col| {
-            // Find pivot
-            var max_row = col;
-            var max_val = @abs(matrix[col][col]);
-            for (col + 1..n_lights) |row| {
-                const val = @abs(matrix[row][col]);
-                if (val > max_val) {
-                    max_val = val;
-                    max_row = row;
+        var visited = std.HashMap(State, void, HashContext, std.hash_map.default_max_load_percentage).init(allocator);
+        defer {
+            var iter = visited.keyIterator();
+            while (iter.next()) |key| {
+                allocator.free(key.counters);
+            }
+            visited.deinit();
+        }
+
+        // Start with all counters at 0
+        const start_counters = try allocator.alloc(usize, self.joltage.len);
+        @memset(start_counters, 0);
+
+        const start_state = State{ .counters = start_counters, .presses = 0 };
+        try queue.append(allocator, start_state);
+
+        const visited_start = try allocator.alloc(usize, self.joltage.len);
+        @memcpy(visited_start, start_counters);
+        try visited.put(State{ .counters = visited_start, .presses = 0 }, {});
+
+        while (queue.items.len > 0) {
+            const current = queue.orderedRemove(0);
+            defer allocator.free(current.counters);
+
+            // Check if we've reached the target joltage
+            if (std.mem.eql(usize, current.counters, self.joltage)) {
+                return current.presses;
+            }
+
+            // Try pressing each switch
+            for (self.switches) |switch_pattern| {
+                // Clone current state
+                const next_counters = try allocator.alloc(usize, self.joltage.len);
+                @memcpy(next_counters, current.counters);
+
+                // Increment counters where switch has a 1
+                for (switch_pattern, 0..) |affects, i| {
+                    if (affects == 1) {
+                        next_counters[i] += 1;
+                    }
+                }
+
+                // Check if any counter exceeded the target (pruning optimization)
+                var exceeded = false;
+                for (next_counters, 0..) |counter, i| {
+                    if (counter > self.joltage[i]) {
+                        exceeded = true;
+                        break;
+                    }
+                }
+
+                if (exceeded) {
+                    allocator.free(next_counters);
+                    continue;
+                }
+
+                // Check if we've visited this state
+                if (visited.get(State{ .counters = next_counters, .presses = 0 }) == null) {
+                    const visited_counters = try allocator.alloc(usize, self.joltage.len);
+                    @memcpy(visited_counters, next_counters);
+                    try visited.put(State{ .counters = visited_counters, .presses = 0 }, {});
+
+                    try queue.append(allocator, State{
+                        .counters = next_counters,
+                        .presses = current.presses + 1,
+                    });
+                } else {
+                    allocator.free(next_counters);
                 }
             }
-
-            // Swap rows if needed
-            if (max_row != col) {
-                const temp = matrix[col];
-                matrix[col] = matrix[max_row];
-                matrix[max_row] = temp;
-            }
-
-            // Check for zero pivot (no unique solution)
-            if (@abs(matrix[col][col]) < 1e-10) {
-                continue;
-            }
-
-            // Eliminate column
-            for (col + 1..n_lights) |row| {
-                const factor = matrix[row][col] / matrix[col][col];
-                for (col..n_switches + 1) |j| {
-                    matrix[row][j] -= factor * matrix[col][j];
-                }
-            }
         }
 
-        // Back substitution
-        var solution = try allocator.alloc(f64, n_switches);
-        defer allocator.free(solution);
-        @memset(solution, 0);
-
-        var row: isize = @intCast(@min(n_lights, n_switches) - 1);
-        while (row >= 0) : (row -= 1) {
-            const r: usize = @intCast(row);
-            if (@abs(matrix[r][r]) < 1e-10) {
-                // No unique solution or inconsistent system
-                return null;
-            }
-
-            var sum: f64 = matrix[r][n_switches];
-            for (r + 1..n_switches) |j| {
-                sum -= matrix[r][j] * solution[j];
-            }
-            solution[r] = sum / matrix[r][r];
-        }
-
-        // Convert to integers and verify solution is non-negative
-        var result = try allocator.alloc(usize, n_switches);
-        for (solution, 0..) |val, i| {
-            // Check if solution is approximately an integer
-            const rounded = @round(val);
-            if (@abs(val - rounded) > 1e-6) {
-                allocator.free(result);
-                return null; // Not an integer solution
-            }
-
-            if (rounded < 0) {
-                allocator.free(result);
-                return null; // Negative presses not allowed
-            }
-
-            result[i] = @intFromFloat(rounded);
-        }
-
-        // Verify the solution
-        for (0..n_lights) |i| {
-            var sum: usize = 0;
-            for (0..n_switches) |j| {
-                sum += self.switches[j][i] * result[j];
-            }
-            if (sum != self.joltage[i]) {
-                allocator.free(result);
-                return null; // Solution doesn't work
-            }
-        }
-
-        return result;
+        // No solution found
+        return null;
     }
 };
 
@@ -431,15 +431,9 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     // Find minimum presses for all machines and sum them up
     var total_presses: usize = 0;
     for (machines.items) |machine| {
-        if (try machine.solveLinearSystem(allocator)) |solution| {
-            defer allocator.free(solution);
-
-            var presses: usize = 0;
-            for (solution) |s| {
-                presses += s;
-            }
-            std.debug.print("Min presses for this machine: {d}\n", .{presses});
-            total_presses += presses;
+        if (try machine.findMinPressesForJoltage(allocator)) |solution| {
+            std.debug.print("Min presses for this machine: {d}\n", .{solution});
+            total_presses += solution;
         } else {
             std.debug.print("No solution found for this machine!\n", .{});
             return error.NoSolution;
