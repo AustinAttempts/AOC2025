@@ -97,6 +97,7 @@ const Machine = struct {
 
         while (queue.items.len > 0) {
             const current = queue.orderedRemove(0);
+            defer allocator.free(current.lights);
 
             // Check if we've reached the key
             if (std.mem.eql(bool, current.lights, self.key)) {
