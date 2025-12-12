@@ -9,6 +9,7 @@ pub fn main() !void {
 
     const input = @embedFile("inputs/day11.txt");
     std.debug.print("Part 1 Answer: {d}\n", .{try part1(allocator, input)});
+    std.debug.print("Part 2 Answer: {d}\n", .{try part2(allocator, input)});
 
     const elapsed = timer.read();
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
@@ -106,12 +107,88 @@ fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
     return all_paths.items.len;
 }
 
+fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
+    var device_map = std.StringHashMap(std.ArrayList([]const u8)).init(allocator);
+    defer {
+        var iter = device_map.iterator();
+        while (iter.next()) |entry| {
+            entry.value_ptr.deinit(allocator);
+        }
+        device_map.deinit();
+    }
+
+    var lines = std.mem.splitScalar(u8, input, '\n');
+    while (lines.next()) |line| {
+        var outputs: std.ArrayList([]const u8) = .empty;
+        var chunks = std.mem.splitAny(u8, line, ": ");
+        const device = chunks.next().?;
+        std.debug.print("Device: {s} --> ", .{device});
+        while (chunks.next()) |chunk| {
+            if (chunk.len == 0) continue;
+            std.debug.print("{s} ", .{chunk});
+            try outputs.append(allocator, chunk);
+        }
+        std.debug.print("\n", .{});
+        try device_map.put(device, outputs);
+    }
+
+    // DFS to find all paths from "svr" to "out"
+    var all_paths: std.ArrayList(std.ArrayList([]const u8)) = .empty;
+    defer {
+        for (all_paths.items) |*path| {
+            path.deinit(allocator);
+        }
+        all_paths.deinit(allocator);
+    }
+
+    var current_path: std.ArrayList([]const u8) = .empty;
+    defer current_path.deinit(allocator);
+
+    var visited = std.StringHashMap(void).init(allocator);
+    defer visited.deinit();
+
+    try dfs(allocator, &device_map, "svr", "out", &current_path, &visited, &all_paths);
+
+    // Print all paths found
+    var valid_paths: usize = 0;
+    std.debug.print("\nFound {d} paths:\n", .{all_paths.items.len});
+    for (all_paths.items, 0..) |path, i| {
+        std.debug.print("Path {d}: ", .{i + 1});
+        var contains_dac = false;
+        var contains_fft = false;
+        for (path.items, 0..) |node, j| {
+            std.debug.print("{s}", .{node});
+            if (j < path.items.len - 1) std.debug.print(" -> ", .{});
+            if (std.mem.eql(u8, node, "dac")) contains_dac = true;
+            if (std.mem.eql(u8, node, "fft")) contains_fft = true;
+        }
+
+        if (contains_dac and contains_fft) {
+            std.debug.print(" (VALID PATH!)", .{});
+            valid_paths += 1;
+        }
+        std.debug.print("\n", .{});
+    }
+
+    return valid_paths;
+}
+
 test "part 1" {
-    const input = @embedFile("inputs/test_case.txt");
+    const input = @embedFile("inputs/test_case1.txt");
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     std.debug.print("\nRunning part 1 test...\n", .{});
     try std.testing.expectEqual(5, try part1(allocator, input));
+}
+
+test "part 2" {
+    const input = @embedFile("inputs/test_case2.txt");
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    std.debug.print("\nRunning part 2 test...\n", .{});
+    try std.testing.expectEqual(2, try part2(allocator, input));
 }
