@@ -147,30 +147,60 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     var visited = std.StringHashMap(void).init(allocator);
     defer visited.deinit();
 
-    try dfs(allocator, &device_map, "svr", "out", &current_path, &visited, &all_paths);
+    try dfs(allocator, &device_map, "svr", "fft", &current_path, &visited, &all_paths);
 
-    // Print all paths found
-    var valid_paths: usize = 0;
-    std.debug.print("\nFound {d} paths:\n", .{all_paths.items.len});
-    for (all_paths.items, 0..) |path, i| {
-        std.debug.print("Path {d}: ", .{i + 1});
+    // Count All Paths "svr" -> "fft" without "dac"
+    var valid_paths_svr_to_fft: usize = 0;
+    for (all_paths.items) |path| {
         var contains_dac = false;
-        var contains_fft = false;
-        for (path.items, 0..) |node, j| {
-            std.debug.print("{s}", .{node});
-            if (j < path.items.len - 1) std.debug.print(" -> ", .{});
+        for (path.items) |node| {
             if (std.mem.eql(u8, node, "dac")) contains_dac = true;
+        }
+
+        if (!contains_dac) {
+            valid_paths_svr_to_fft += 1;
+        }
+    }
+    std.debug.print("\nFound {d} paths form svr to fft but {d} did not contain dac\n", .{ all_paths.items.len, valid_paths_svr_to_fft });
+
+    current_path.clearAndFree(allocator);
+    visited.clearAndFree();
+    for (all_paths.items) |*path| {
+        path.clearAndFree(allocator);
+    }
+    all_paths.clearAndFree(allocator);
+
+    try dfs(allocator, &device_map, "fft", "dac", &current_path, &visited, &all_paths);
+
+    // Count All Paths "fft" -> "dac"
+    const valid_paths_fft_to_dac: usize = all_paths.items.len;
+    std.debug.print("\nFound {d} paths form fft to dac:\n", .{all_paths.items.len});
+
+    current_path.clearAndFree(allocator);
+    visited.clearAndFree();
+    for (all_paths.items) |*path| {
+        path.clearAndFree(allocator);
+    }
+    all_paths.clearAndFree(allocator);
+
+    try dfs(allocator, &device_map, "dac", "out", &current_path, &visited, &all_paths);
+
+    // Count All Paths "dac" -> "out" without "fft"
+    var valid_paths_dac_to_fft: usize = 0;
+    std.debug.print("\nFound {d} paths from dac to out\n", .{all_paths.items.len});
+    for (all_paths.items) |path| {
+        var contains_fft = false;
+        for (path.items) |node| {
             if (std.mem.eql(u8, node, "fft")) contains_fft = true;
         }
 
-        if (contains_dac and contains_fft) {
-            std.debug.print(" (VALID PATH!)", .{});
-            valid_paths += 1;
+        if (!contains_fft) {
+            valid_paths_dac_to_fft += 1;
         }
-        std.debug.print("\n", .{});
     }
+    std.debug.print("\nFound {d} paths form dac to out but {d} did not contain fft\n", .{ all_paths.items.len, valid_paths_dac_to_fft });
 
-    return valid_paths;
+    return valid_paths_svr_to_fft * valid_paths_fft_to_dac * valid_paths_dac_to_fft;
 }
 
 test "part 1" {
