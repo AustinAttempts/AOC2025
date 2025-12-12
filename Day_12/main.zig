@@ -26,6 +26,13 @@ const Present = struct {
     fn deinit(self: *Present, allocator: std.mem.Allocator) void {
         allocator.free(self.shape);
     }
+
+    fn print(self: Present) void {
+        std.debug.print("Present {d} (area={d}):\n", .{ self.key, self.area });
+        for (self.shape) |line| {
+            std.debug.print("  {s}\n", .{line});
+        }
+    }
 };
 
 const Region = struct {
@@ -41,6 +48,16 @@ const Region = struct {
 
     fn deinit(self: *Region, allocator: std.mem.Allocator) void {
         allocator.free(self.present_qty);
+    }
+
+    fn print(self: Region) void {
+        std.debug.print("Region {d}x{d} (area={d}):\n", .{ self.x, self.y, self.area });
+        std.debug.print("  Present quantities: [", .{});
+        for (self.present_qty, 0..) |qty, i| {
+            if (i > 0) std.debug.print(", ", .{});
+            std.debug.print("{d}", .{qty});
+        }
+        std.debug.print("]\n", .{});
     }
 };
 
@@ -114,7 +131,29 @@ fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
         prev_state = curr_state;
     }
 
-    return 0;
+    var iter = presents.valueIterator();
+    while (iter.next()) |present| {
+        present.print();
+    }
+
+    for (regions.items) |region| {
+        region.print();
+    }
+
+    var valid_regions: usize = 0;
+    for (regions.items) |region| {
+        const max_area = region.area;
+        var presents_area: usize = 0;
+        for (region.present_qty, 0..) |cnt, i| {
+            presents_area += (presents.get(i).?.area) * cnt;
+        }
+        std.debug.print("Region has area {d} & presents take up area {d}\n", .{ max_area, presents_area });
+        if (max_area > presents_area) {
+            valid_regions += 1;
+        }
+    }
+
+    return valid_regions;
 }
 
 test "part 1" {
