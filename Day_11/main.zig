@@ -170,18 +170,33 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     defer memo.deinit();
 
     // Calculate segment 1: svr -> fft
-    const paths_1 = try countPaths(allocator, &device_map, "svr", "fft", &memo);
-    memo.clearRetainingCapacity(); // Clear cache between distinct searches
+    var paths_1 = try countPaths(allocator, &device_map, "svr", "fft", &memo);
+    memo.clearRetainingCapacity();
 
     // Calculate segment 2: fft -> dac
-    const paths_2 = try countPaths(allocator, &device_map, "fft", "dac", &memo);
+    var paths_2 = try countPaths(allocator, &device_map, "fft", "dac", &memo);
     memo.clearRetainingCapacity();
 
     // Calculate segment 3: dac -> out
-    const paths_3 = try countPaths(allocator, &device_map, "dac", "out", &memo);
+    var paths_3 = try countPaths(allocator, &device_map, "dac", "out", &memo);
+
+    const fft_to_dac_cnt = paths_1 * paths_2 * paths_3;
+
+    // Calculate segment 1: svr -> dac
+    paths_1 = try countPaths(allocator, &device_map, "svr", "dac", &memo);
+    memo.clearRetainingCapacity();
+
+    // Calculate segment 2: dac -> fft
+    paths_2 = try countPaths(allocator, &device_map, "dac", "fft", &memo);
+    memo.clearRetainingCapacity();
+
+    // Calculate segment 3: fft -> out
+    paths_3 = try countPaths(allocator, &device_map, "fft", "out", &memo);
+
+    const dac_to_fft_cnt = paths_1 * paths_2 * paths_3;
 
     // Final result
-    return paths_1 * paths_2 * paths_3;
+    return @max(fft_to_dac_cnt, dac_to_fft_cnt);
 }
 
 test "part 1" {
