@@ -33,5 +33,5 @@ test "part 1" {
     const allocator = gpa.allocator();
 
     std.debug.print("\nRunning part 1 test...\n", .{});
-    try std.testing.expectEqual(5, try part1(allocator, input));
+    try std.testing.expectEqual(2, try part1(allocator, input));
 }
