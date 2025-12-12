@@ -107,6 +107,40 @@ fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
     return all_paths.items.len;
 }
 
+fn countPaths(
+    allocator: std.mem.Allocator,
+    device_map: *std.StringHashMap(std.ArrayList([]const u8)),
+    current: []const u8,
+    target: []const u8,
+    // Cache maps "current_node_name" -> "count_of_paths_to_target"
+    memo: *std.StringHashMap(usize),
+) !usize {
+    // 1. Check if we reached target
+    if (std.mem.eql(u8, current, target)) return 1;
+
+    // 2. Check Cache (Memoization)
+    if (memo.get(current)) |cached_count| {
+        return cached_count;
+    }
+
+    var total_paths: usize = 0;
+
+    // 3. Visit Neighbors
+    if (device_map.get(current)) |neighbors| {
+        for (neighbors.items) |neighbor| {
+            // NOTE: This assumes a DAG (Directed Acyclic Graph).
+            // If your graph has cycles, simple memoization requires more complex state
+            // (e.g. tracking visited bits in the key), but AOC problems like this
+            // usually imply a flow/DAG structure for Part 2.
+            total_paths += try countPaths(allocator, device_map, neighbor, target, memo);
+        }
+    }
+
+    // 4. Save to Cache
+    try memo.put(current, total_paths);
+    return total_paths;
+}
+
 fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     var device_map = std.StringHashMap(std.ArrayList([]const u8)).init(allocator);
     defer {
@@ -132,75 +166,22 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
         try device_map.put(device, outputs);
     }
 
-    // DFS to find all paths from "svr" to "out"
-    var all_paths: std.ArrayList(std.ArrayList([]const u8)) = .empty;
-    defer {
-        for (all_paths.items) |*path| {
-            path.deinit(allocator);
-        }
-        all_paths.deinit(allocator);
-    }
+    var memo = std.StringHashMap(usize).init(allocator);
+    defer memo.deinit();
 
-    var current_path: std.ArrayList([]const u8) = .empty;
-    defer current_path.deinit(allocator);
+    // Calculate segment 1: svr -> fft
+    const paths_1 = try countPaths(allocator, &device_map, "svr", "fft", &memo);
+    memo.clearRetainingCapacity(); // Clear cache between distinct searches
 
-    var visited = std.StringHashMap(void).init(allocator);
-    defer visited.deinit();
+    // Calculate segment 2: fft -> dac
+    const paths_2 = try countPaths(allocator, &device_map, "fft", "dac", &memo);
+    memo.clearRetainingCapacity();
 
-    try dfs(allocator, &device_map, "svr", "fft", &current_path, &visited, &all_paths);
+    // Calculate segment 3: dac -> out
+    const paths_3 = try countPaths(allocator, &device_map, "dac", "out", &memo);
 
-    // Count All Paths "svr" -> "fft" without "dac"
-    var valid_paths_svr_to_fft: usize = 0;
-    for (all_paths.items) |path| {
-        var contains_dac = false;
-        for (path.items) |node| {
-            if (std.mem.eql(u8, node, "dac")) contains_dac = true;
-        }
-
-        if (!contains_dac) {
-            valid_paths_svr_to_fft += 1;
-        }
-    }
-    std.debug.print("\nFound {d} paths form svr to fft but {d} did not contain dac\n", .{ all_paths.items.len, valid_paths_svr_to_fft });
-
-    current_path.clearAndFree(allocator);
-    visited.clearAndFree();
-    for (all_paths.items) |*path| {
-        path.clearAndFree(allocator);
-    }
-    all_paths.clearAndFree(allocator);
-
-    try dfs(allocator, &device_map, "fft", "dac", &current_path, &visited, &all_paths);
-
-    // Count All Paths "fft" -> "dac"
-    const valid_paths_fft_to_dac: usize = all_paths.items.len;
-    std.debug.print("\nFound {d} paths form fft to dac:\n", .{all_paths.items.len});
-
-    current_path.clearAndFree(allocator);
-    visited.clearAndFree();
-    for (all_paths.items) |*path| {
-        path.clearAndFree(allocator);
-    }
-    all_paths.clearAndFree(allocator);
-
-    try dfs(allocator, &device_map, "dac", "out", &current_path, &visited, &all_paths);
-
-    // Count All Paths "dac" -> "out" without "fft"
-    var valid_paths_dac_to_fft: usize = 0;
-    std.debug.print("\nFound {d} paths from dac to out\n", .{all_paths.items.len});
-    for (all_paths.items) |path| {
-        var contains_fft = false;
-        for (path.items) |node| {
-            if (std.mem.eql(u8, node, "fft")) contains_fft = true;
-        }
-
-        if (!contains_fft) {
-            valid_paths_dac_to_fft += 1;
-        }
-    }
-    std.debug.print("\nFound {d} paths form dac to out but {d} did not contain fft\n", .{ all_paths.items.len, valid_paths_dac_to_fft });
-
-    return valid_paths_svr_to_fft * valid_paths_fft_to_dac * valid_paths_dac_to_fft;
+    // Final result
+    return paths_1 * paths_2 * paths_3;
 }
 
 test "part 1" {
