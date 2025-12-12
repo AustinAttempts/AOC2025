@@ -462,3 +462,13 @@ test "part 2" {
     std.debug.print("\nRunning part 2 test...\n", .{});
     try std.testing.expectEqual(33, try part2(allocator, input));
 }
+
+test "Min Joltage Presses" {
+    const input = @embedFile("inputs/joltage.txt");
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    std.debug.print("\nRunning Minimum Joltage Presess Test...\n", .{});
+    try std.testing.expectEqual(33, try part2(allocator, input));
+}
