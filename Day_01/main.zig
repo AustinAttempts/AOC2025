@@ -26,6 +26,7 @@ fn secretEntrance(input: []const u8) !Solution {
 
     var lines = std.mem.splitScalar(u8, input, '\n');
     while (lines.next()) |line| {
+        if (line.len == 0) continue;
         const ticks = try std.fmt.parseInt(usize, line[1..], 10);
 
         for (0..ticks) |_| {
