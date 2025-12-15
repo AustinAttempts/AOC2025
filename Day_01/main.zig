@@ -1,7 +1,5 @@
 const std = @import("std");
 
-const STARTING_LOCK_VALUE: i32 = 50;
-
 const Solution = struct {
     part1: usize,
     part2: usize,
@@ -20,34 +18,27 @@ pub fn main() !void {
 }
 
 fn secretEntrance(input: []const u8) !Solution {
-    var lock_value: i32 = STARTING_LOCK_VALUE;
+    const LOCK_MODULO: isize = 100;
+    var lock_value = 50;
     var part1: usize = 0;
     var part2: usize = 0;
 
     var lines = std.mem.splitScalar(u8, input, '\n');
     while (lines.next()) |line| {
         if (line.len == 0) continue;
+        const direction = line[0];
+        if (direction != 'R' and direction != 'L') {
+            return error.InvalidDirection;
+        }
+
         const ticks = try std.fmt.parseInt(usize, line[1..], 10);
+        const delta: isize = if (direction == 'R') 1 else -1;
 
         for (0..ticks) |_| {
-            if (lock_value == 0) {
-                part2 += 1;
-            }
-            switch (line[0]) {
-                'R' => lock_value += 1,
-                'L' => lock_value -= 1,
-                else => return error.InvalidDirection,
-            }
-
-            if (lock_value < 0) {
-                lock_value += 100;
-            } else if (lock_value >= 100) {
-                lock_value -= 100;
-            }
+            if (lock_value == 0) part2 += 1;
+            lock_value = @mod(lock_value + delta, LOCK_MODULO);
         }
-        if (lock_value == 0) {
-            part1 += 1;
-        }
+        if (lock_value == 0) part1 += 1;
     }
 
     return .{ .part1 = part1, .part2 = part2 };
