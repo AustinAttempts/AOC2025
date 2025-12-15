@@ -31,10 +31,10 @@ fn giftShop(input: []const u8) !Solution {
 
         for (start_id..end_id + 1) |id| {
             const id_str = try std.fmt.bufPrint(&buf, "{d}", .{id});
-            if (bad_id_part_1(id_str)) {
+            if (badIdPart1(id_str)) {
                 part1 += id;
             }
-            if (bad_id_part_2(id_str)) {
+            if (badIdPart2(id_str)) {
                 part2 += id;
             }
         }
@@ -43,7 +43,7 @@ fn giftShop(input: []const u8) !Solution {
     return .{ .part1 = part1, .part2 = part2 };
 }
 
-fn bad_id_part_1(id: []const u8) bool {
+fn badIdPart1(id: []const u8) bool {
     const len = id.len;
     const first_half = id[0 .. len / 2];
     const second_half = id[len / 2 .. len];
@@ -54,7 +54,7 @@ fn bad_id_part_1(id: []const u8) bool {
     return false;
 }
 
-fn bad_id_part_2(id: []const u8) bool {
+fn badIdPart2(id: []const u8) bool {
     const len = id.len;
     for (1..(len / 2) + 1) |i| {
         if (len % i == 0) {
@@ -76,10 +76,10 @@ fn bad_id_part_2(id: []const u8) bool {
 }
 
 test "Part 1 bad ID detection" {
-    try std.testing.expect(bad_id_part_1("55"));
-    try std.testing.expect(bad_id_part_1("6464"));
-    try std.testing.expect(bad_id_part_1("123123"));
-    try std.testing.expect(!bad_id_part_1("101"));
+    try std.testing.expect(badIdPart1("55"));
+    try std.testing.expect(badIdPart1("6464"));
+    try std.testing.expect(badIdPart1("123123"));
+    try std.testing.expect(!badIdPart1("101"));
 }
 
 test "part 1" {
@@ -89,15 +89,15 @@ test "part 1" {
 }
 
 test "Part 2 bad ID detection" {
-    try std.testing.expect(bad_id_part_2("12341234"));
-    try std.testing.expect(bad_id_part_2("123123123"));
-    try std.testing.expect(bad_id_part_2("1212121212"));
-    try std.testing.expect(bad_id_part_2("1111111"));
-    try std.testing.expect(bad_id_part_2("55"));
-    try std.testing.expect(bad_id_part_2("6464"));
-    try std.testing.expect(bad_id_part_2("123123"));
-    try std.testing.expect(!bad_id_part_2("101"));
-    try std.testing.expect(!bad_id_part_2("5"));
+    try std.testing.expect(badIdPart2("12341234"));
+    try std.testing.expect(badIdPart2("123123123"));
+    try std.testing.expect(badIdPart2("1212121212"));
+    try std.testing.expect(badIdPart2("1111111"));
+    try std.testing.expect(badIdPart2("55"));
+    try std.testing.expect(badIdPart2("6464"));
+    try std.testing.expect(badIdPart2("123123"));
+    try std.testing.expect(!badIdPart2("101"));
+    try std.testing.expect(!badIdPart2("5"));
 }
 
 test "part 2" {
