@@ -1,41 +1,46 @@
 const std = @import("std");
 
+const Solution = struct {
+    part1: usize,
+    part2: usize,
+};
+
 pub fn main() !void {
     var timer = try std.time.Timer.start();
     const input = @embedFile("inputs/day02.txt");
+    const solution = try giftShop(input);
 
-    std.debug.print("Part 1 Answer: {d}\n", .{try part1(input)});
-    std.debug.print("Part 2 Answer: {d}\n", .{try part2(input)});
+    std.debug.print("Part 1 Answer: {d}\n", .{solution.part1});
+    std.debug.print("Part 2 Answer: {d}\n", .{solution.part2});
 
     const elapsed = timer.read();
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
 }
 
-fn part1(input: []const u8) !usize {
-    var bad_id_sum: usize = 0;
-    var id_ranges = std.mem.splitScalar(u8, input, ',');
-    var buf: [32]u8 = undefined; // Attempt to remove allocations
+fn giftShop(input: []const u8) !Solution {
+    var part1: usize = 0;
+    var part2: usize = 0;
+    var buf: [32]u8 = undefined;
 
+    var id_ranges = std.mem.splitScalar(u8, input, ',');
     while (id_ranges.next()) |id_range| {
+        if (id_range.len == 0) continue;
         var bounds = std.mem.splitScalar(u8, id_range, '-');
-        const start_id = std.fmt.parseInt(usize, bounds.next().?, 10) catch |err| {
-            std.debug.print("failed to parse: {s}\n", .{id_range});
-            return err;
-        };
-        const end_id = std.fmt.parseInt(usize, bounds.next().?, 10) catch |err| {
-            std.debug.print("failed to parse: {s}\n", .{id_range});
-            return err;
-        };
+        const start_id = try std.fmt.parseInt(usize, bounds.next().?, 10);
+        const end_id = try std.fmt.parseInt(usize, bounds.next().?, 10);
 
         for (start_id..end_id + 1) |id| {
             const id_str = try std.fmt.bufPrint(&buf, "{d}", .{id});
             if (bad_id_part_1(id_str)) {
-                bad_id_sum += id;
+                part1 += id;
+            }
+            if (bad_id_part_2(id_str)) {
+                part2 += id;
             }
         }
     }
 
-    return bad_id_sum;
+    return .{ .part1 = part1, .part2 = part2 };
 }
 
 fn bad_id_part_1(id: []const u8) bool {
@@ -47,33 +52,6 @@ fn bad_id_part_1(id: []const u8) bool {
     }
 
     return false;
-}
-
-fn part2(input: []const u8) !usize {
-    var bad_id_sum: usize = 0;
-    var id_ranges = std.mem.splitScalar(u8, input, ',');
-    var buf: [32]u8 = undefined; // Attempt to remove allocations
-
-    while (id_ranges.next()) |id_range| {
-        var bounds = std.mem.splitScalar(u8, id_range, '-');
-        const start_id = std.fmt.parseInt(usize, bounds.next().?, 10) catch |err| {
-            std.debug.print("failed to parse: {s}\n", .{id_range});
-            return err;
-        };
-        const end_id = std.fmt.parseInt(usize, bounds.next().?, 10) catch |err| {
-            std.debug.print("failed to parse: {s}\n", .{id_range});
-            return err;
-        };
-
-        for (start_id..end_id + 1) |id| {
-            const id_str = try std.fmt.bufPrint(&buf, "{d}", .{id});
-            if (bad_id_part_2(id_str)) {
-                bad_id_sum += id;
-            }
-        }
-    }
-
-    return bad_id_sum;
 }
 
 fn bad_id_part_2(id: []const u8) bool {
@@ -107,7 +85,7 @@ test "Part 1 bad ID detection" {
 test "part 1" {
     const input = @embedFile("inputs/test_case.txt");
 
-    try std.testing.expectEqual(1227775554, try part1(input));
+    try std.testing.expectEqual(1227775554, (try giftShop(input)).part1);
 }
 
 test "Part 2 bad ID detection" {
@@ -124,5 +102,5 @@ test "Part 2 bad ID detection" {
 
 test "part 2" {
     const input = @embedFile("inputs/test_case.txt");
-    try std.testing.expectEqual(4174379265, try part2(input));
+    try std.testing.expectEqual(4174379265, (try giftShop(input)).part2);
 }
