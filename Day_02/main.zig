@@ -31,10 +31,10 @@ fn giftShop(input: []const u8) !Solution {
 
         for (start_id..end_id + 1) |id| {
             const id_str = try std.fmt.bufPrint(&buf, "{d}", .{id});
-            if (badIdPart1(id_str)) {
+            if (isBadIdPart1(id_str)) {
                 part1 += id;
             }
-            if (badIdPart2(id_str)) {
+            if (isBadIdPart2(id_str)) {
                 part2 += id;
             }
         }
@@ -43,10 +43,15 @@ fn giftShop(input: []const u8) !Solution {
     return .{ .part1 = part1, .part2 = part2 };
 }
 
-fn badIdPart1(id: []const u8) bool {
+/// Checks if an ID is "bad" for Part 1: the first half equals the second half
+fn isBadIdPart1(id: []const u8) bool {
     const len = id.len;
-    const first_half = id[0 .. len / 2];
-    const second_half = id[len / 2 .. len];
+    if (len % 2 != 0) return false; // Odd length can't have equal halves
+
+    const mid = len / 2;
+    const first_half = id[0..mid];
+    const second_half = id[mid..len];
+
     if (std.mem.eql(u8, first_half, second_half)) {
         return true;
     }
@@ -54,32 +59,39 @@ fn badIdPart1(id: []const u8) bool {
     return false;
 }
 
-fn badIdPart2(id: []const u8) bool {
+/// Checks if an ID is "bad" for Part 2: the ID consists of a repeated pattern
+fn isBadIdPart2(id: []const u8) bool {
     const len = id.len;
-    for (1..(len / 2) + 1) |i| {
-        if (len % i == 0) {
-            const substr = id[0..i];
-            var is_repeated = true;
+    if (len == 1) return false; // Single digit can't be a repeated pattern
 
-            var j: usize = i;
-            while (j < len) : (j += i) {
-                if (!std.mem.eql(u8, substr, id[j .. j + i])) {
-                    is_repeated = false;
-                    break;
-                }
+    // Try all possible pattern lengths (divisors of len)
+    var pattern_len: usize = 1;
+    while (pattern_len <= len / 2) : (pattern_len += 1) {
+        if (len % pattern_len != 0) continue;
+
+        const pattern = id[0..pattern_len];
+        var pos: usize = pattern_len;
+        var is_repeated = true;
+
+        while (pos < len) : (pos += pattern_len) {
+            if (!std.mem.eql(u8, pattern, id[pos .. pos + pattern_len])) {
+                is_repeated = false;
+                break;
             }
-
-            if (is_repeated) return true;
         }
+
+        if (is_repeated) return true;
     }
     return false;
 }
 
 test "Part 1 bad ID detection" {
-    try std.testing.expect(badIdPart1("55"));
-    try std.testing.expect(badIdPart1("6464"));
-    try std.testing.expect(badIdPart1("123123"));
-    try std.testing.expect(!badIdPart1("101"));
+    try std.testing.expect(isBadIdPart1("55"));
+    try std.testing.expect(isBadIdPart1("6464"));
+    try std.testing.expect(isBadIdPart1("123123"));
+    try std.testing.expect(!isBadIdPart1("101"));
+    try std.testing.expect(!isBadIdPart1("5"));
+    try std.testing.expect(!isBadIdPart1("12345"));
 }
 
 test "part 1" {
@@ -89,15 +101,16 @@ test "part 1" {
 }
 
 test "Part 2 bad ID detection" {
-    try std.testing.expect(badIdPart2("12341234"));
-    try std.testing.expect(badIdPart2("123123123"));
-    try std.testing.expect(badIdPart2("1212121212"));
-    try std.testing.expect(badIdPart2("1111111"));
-    try std.testing.expect(badIdPart2("55"));
-    try std.testing.expect(badIdPart2("6464"));
-    try std.testing.expect(badIdPart2("123123"));
-    try std.testing.expect(!badIdPart2("101"));
-    try std.testing.expect(!badIdPart2("5"));
+    try std.testing.expect(isBadIdPart2("12341234"));
+    try std.testing.expect(isBadIdPart2("123123123"));
+    try std.testing.expect(isBadIdPart2("1212121212"));
+    try std.testing.expect(isBadIdPart2("1111111"));
+    try std.testing.expect(isBadIdPart2("55"));
+    try std.testing.expect(isBadIdPart2("6464"));
+    try std.testing.expect(isBadIdPart2("123123"));
+    try std.testing.expect(!isBadIdPart2("101"));
+    try std.testing.expect(!isBadIdPart2("5"));
+    try std.testing.expect(!isBadIdPart2("12345"));
 }
 
 test "part 2" {
