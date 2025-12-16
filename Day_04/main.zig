@@ -137,15 +137,6 @@ fn replaceInMap(map: *CoordMap, old: u8, new: u8) void {
     }
 }
 
-fn printMap(map: CoordMap, max_size: Coord) void {
-    for (0..max_size.y) |y| {
-        for (0..max_size.x) |x| {
-            std.debug.print("{c}", .{map.get(.{ .x = x, .y = y }) orelse '?'});
-        }
-        std.debug.print("\n", .{});
-    }
-}
-
 test "part 1" {
     const input = @embedFile("inputs/test_case.txt");
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -176,4 +167,179 @@ test "part 2" {
     const allocator = gpa.allocator();
 
     try std.testing.expectEqual(43, (try printingDepartment(allocator, input)).part2);
+}
+
+test "Coord.isValid" {
+    const max_size = Coord{ .x = 10, .y = 10 };
+
+    // Valid coordinates
+    try std.testing.expect((Coord{ .x = 0, .y = 0 }).isValid(max_size));
+    try std.testing.expect((Coord{ .x = 5, .y = 5 }).isValid(max_size));
+    try std.testing.expect((Coord{ .x = 9, .y = 9 }).isValid(max_size));
+
+    // Invalid coordinates (at or beyond boundaries)
+    try std.testing.expect(!(Coord{ .x = 10, .y = 0 }).isValid(max_size));
+    try std.testing.expect(!(Coord{ .x = 0, .y = 10 }).isValid(max_size));
+    try std.testing.expect(!(Coord{ .x = 10, .y = 10 }).isValid(max_size));
+    try std.testing.expect(!(Coord{ .x = 15, .y = 15 }).isValid(max_size));
+}
+
+test "countNeighbors" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    var map = CoordMap.init(allocator);
+    defer map.deinit();
+
+    // Create a simple 3x3 grid with a roll in the center
+    // @ @ @
+    // @ @ @
+    // @ @ @
+    for (0..3) |y| {
+        for (0..3) |x| {
+            try map.put(.{ .x = x, .y = y }, ROLL);
+        }
+    }
+
+    const max_size = Coord{ .x = 3, .y = 3 };
+
+    // Center position has 8 neighbors
+    try std.testing.expectEqual(8, countNeighbors(&map, .{ .x = 1, .y = 1 }, max_size));
+
+    // Corner positions have 3 neighbors
+    try std.testing.expectEqual(3, countNeighbors(&map, .{ .x = 0, .y = 0 }, max_size));
+    try std.testing.expectEqual(3, countNeighbors(&map, .{ .x = 2, .y = 2 }, max_size));
+
+    // Edge positions have 5 neighbors
+    try std.testing.expectEqual(5, countNeighbors(&map, .{ .x = 1, .y = 0 }, max_size));
+    try std.testing.expectEqual(5, countNeighbors(&map, .{ .x = 0, .y = 1 }, max_size));
+}
+
+test "countNeighbors with empty spaces" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    var map = CoordMap.init(allocator);
+    defer map.deinit();
+
+    // Create a grid with some empty spaces
+    // @ . @
+    // . @ .
+    // @ . @
+    try map.put(.{ .x = 0, .y = 0 }, ROLL);
+    try map.put(.{ .x = 1, .y = 0 }, EMPTY);
+    try map.put(.{ .x = 2, .y = 0 }, ROLL);
+
+    try map.put(.{ .x = 0, .y = 1 }, EMPTY);
+    try map.put(.{ .x = 1, .y = 1 }, ROLL);
+    try map.put(.{ .x = 2, .y = 1 }, EMPTY);
+
+    try map.put(.{ .x = 0, .y = 2 }, ROLL);
+    try map.put(.{ .x = 1, .y = 2 }, EMPTY);
+    try map.put(.{ .x = 2, .y = 2 }, ROLL);
+
+    const max_size = Coord{ .x = 3, .y = 3 };
+
+    // Center roll should have 4 neighbors (corners only)
+    try std.testing.expectEqual(4, countNeighbors(&map, .{ .x = 1, .y = 1 }, max_size));
+
+    // Corner rolls should have 1 neighbor each
+    try std.testing.expectEqual(1, countNeighbors(&map, .{ .x = 0, .y = 0 }, max_size));
+}
+
+test "replaceInMap" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    var map = CoordMap.init(allocator);
+    defer map.deinit();
+
+    // Create a map with various cell types
+    try map.put(.{ .x = 0, .y = 0 }, ROLL);
+    try map.put(.{ .x = 1, .y = 0 }, REMOVED);
+    try map.put(.{ .x = 2, .y = 0 }, EMPTY);
+    try map.put(.{ .x = 3, .y = 0 }, REMOVED);
+
+    // Replace all REMOVED with EMPTY
+    replaceInMap(&map, REMOVED, EMPTY);
+
+    try std.testing.expectEqual(ROLL, map.get(.{ .x = 0, .y = 0 }).?);
+    try std.testing.expectEqual(EMPTY, map.get(.{ .x = 1, .y = 0 }).?);
+    try std.testing.expectEqual(EMPTY, map.get(.{ .x = 2, .y = 0 }).?);
+    try std.testing.expectEqual(EMPTY, map.get(.{ .x = 3, .y = 0 }).?);
+}
+
+test "removeRolls single iteration" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    var map = CoordMap.init(allocator);
+    defer map.deinit();
+
+    // Create a pattern where isolated rolls have < 4 neighbors
+    // @ @ @ @ @
+    // @ @ @ @ @
+    // . . . . .
+    // @ . . . @
+    for (0..2) |y| {
+        for (0..5) |x| {
+            try map.put(.{ .x = x, .y = y }, ROLL);
+        }
+    }
+    for (0..5) |x| {
+        try map.put(.{ .x = x, .y = 2 }, EMPTY);
+    }
+    // Add isolated corners that will have < 4 neighbors
+    try map.put(.{ .x = 0, .y = 3 }, ROLL);
+    try map.put(.{ .x = 4, .y = 3 }, ROLL);
+
+    const max_size = Coord{ .x = 5, .y = 4 };
+    const removed = try removeRolls(allocator, &map, max_size);
+
+    // Bottom row of rolls (y=1) should be removed (< 4 neighbors after considering empty row below)
+    // Plus the two isolated corners
+    try std.testing.expect(removed > 0);
+
+    // Verify at least some specific cells are marked as removed
+    // The isolated corners definitely should be removed (only 1-2 neighbors)
+    try std.testing.expectEqual(REMOVED, map.get(.{ .x = 0, .y = 3 }).?);
+    try std.testing.expectEqual(REMOVED, map.get(.{ .x = 4, .y = 3 }).?);
+}
+
+test "buildMap with empty lines" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    var map = CoordMap.init(allocator);
+    defer map.deinit();
+
+    const input = "@@\n\n..\n";
+    const max_size = try buildMap(&map, input);
+
+    // Should skip empty line and build correctly
+    try std.testing.expectEqual(2, max_size.x);
+    try std.testing.expectEqual(2, max_size.y);
+    try std.testing.expectEqual(ROLL, map.get(.{ .x = 0, .y = 0 }).?);
+    try std.testing.expectEqual(EMPTY, map.get(.{ .x = 0, .y = 1 }).?);
+}
+
+test "buildMap calculates correct max dimensions" {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+
+    var map = CoordMap.init(allocator);
+    defer map.deinit();
+
+    // Variable width lines
+    const input = "@@\n@@@@\n@@\n";
+    const max_size = try buildMap(&map, input);
+
+    try std.testing.expectEqual(4, max_size.x); // Max width is 4
+    try std.testing.expectEqual(3, max_size.y); // 3 lines
 }
