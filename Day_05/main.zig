@@ -1,5 +1,10 @@
 const std = @import("std");
 
+const Solution = struct {
+    part1: usize,
+    part2: usize,
+};
+
 const Range = struct {
     start: usize,
     end: usize,
@@ -13,46 +18,15 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     const input = @embedFile("inputs/day05.txt");
-    std.debug.print("Part 1 Answer: {d}\n", .{try part1(allocator, input)});
-    std.debug.print("Part 2 Answer: {d}\n", .{try part2(allocator, input)});
+    const solution = try cafeteria(allocator, input);
+    std.debug.print("Part 1 Answer: {d}\n", .{solution.part1});
+    std.debug.print("Part 2 Answer: {d}\n", .{solution.part2});
 
     const elapsed = timer.read();
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
 }
 
-fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
-    var fresh_ingredients: usize = 0;
-    var range: std.ArrayList(Range) = .empty;
-    defer range.deinit(allocator);
-
-    var lines = std.mem.splitScalar(u8, input, '\n');
-    while (lines.next()) |line| {
-        if (line.len == 0) break; // Handle change in sections
-
-        var bounds = std.mem.splitScalar(u8, line, '-');
-        const start_id = try std.fmt.parseInt(usize, bounds.next().?, 10);
-        const end_id = try std.fmt.parseInt(usize, bounds.next().?, 10);
-        try range.append(allocator, .{ .start = start_id, .end = end_id });
-        std.debug.print("{s}\n", .{line});
-    }
-
-    while (lines.next()) |line| {
-        const id = try std.fmt.parseInt(usize, line, 10);
-        for (range.items) |value| {
-            if (id >= value.start and id <= value.end) {
-                std.debug.print("{d} <- Fresh Ingredient\n", .{id});
-                fresh_ingredients += 1;
-                break;
-            }
-        }
-    }
-
-    return fresh_ingredients;
-}
-
-fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
-    var fresh_ingredients: usize = 0;
-
+fn cafeteria(allocator: std.mem.Allocator, input: []const u8) !Solution {
     // Parse Ranges Data into ArrayLists
     var ranges: std.ArrayList(Range) = .empty;
     defer ranges.deinit(allocator);
@@ -65,7 +39,18 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
         const end_id = try std.fmt.parseInt(usize, bounds.next().?, 10);
         const valid_range: Range = .{ .start = start_id, .end = end_id };
         try ranges.append(allocator, valid_range);
-        std.debug.print("{s}\n", .{line});
+    }
+
+    var part1: usize = 0;
+    while (lines.next()) |line| {
+        if (line.len == 0) continue;
+        const id = try std.fmt.parseInt(usize, line, 10);
+        for (ranges.items) |value| {
+            if (id >= value.start and id <= value.end) {
+                part1 += 1;
+                break;
+            }
+        }
     }
 
     // Sort Ranges by Start Value
@@ -85,19 +70,18 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
 
         if (current.start <= last.end + 1) { // Ranges overlap or are adjacent, merge them
             last.end = @max(last.end, current.end);
-            std.debug.print("{d}-{d} & {d}-{d} -> {d}-{d}\n", .{ last.start, last.end, current.start, current.end, last.start, current.end });
         } else { // No overlap, add as new range
             try merged.append(allocator, current);
         }
     }
 
     // Count Total Unique IDs in Merged Ranges
+    var part2: usize = 0;
     for (merged.items) |value| {
-        fresh_ingredients += (value.end - value.start + 1);
-        std.debug.print("Counting Range: {d}-{d}\n", .{ value.start, value.end });
+        part2 += (value.end - value.start + 1);
     }
 
-    return fresh_ingredients;
+    return .{ .part1 = part1, .part2 = part2 };
 }
 
 test "part 1" {
@@ -106,8 +90,7 @@ test "part 1" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    std.debug.print("\nRunning part 1 test...\n", .{});
-    try std.testing.expectEqual(3, try part1(allocator, input));
+    try std.testing.expectEqual(3, (try cafeteria(allocator, input)).part1);
 }
 
 test "part 2" {
@@ -116,8 +99,7 @@ test "part 2" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    std.debug.print("\nRunning part 2 test...\n", .{});
-    try std.testing.expectEqual(14, try part2(allocator, input));
+    try std.testing.expectEqual(14, (try cafeteria(allocator, input)).part2);
 }
 
 test "part 2 edge case" {
@@ -126,6 +108,5 @@ test "part 2 edge case" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    std.debug.print("\nRunning part 2 edge case test...\n", .{});
-    try std.testing.expectEqual(41, try part2(allocator, input));
+    try std.testing.expectEqual(41, (try cafeteria(allocator, input)).part2);
 }
