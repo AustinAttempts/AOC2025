@@ -25,37 +25,50 @@ fn lobby(allocator: std.mem.Allocator, input: []const u8) !Solution {
     var part1: usize = 0;
     var part2: usize = 0;
     var lines = std.mem.splitScalar(u8, input, '\n');
-    while (lines.next()) |bank| {
-        if (bank.len == 0) continue;
-        part1 += try joltagePart1(allocator, bank);
-        part2 += try joltagePart2(allocator, bank);
+    while (lines.next()) |line| {
+        if (line.len == 0) continue;
+        part1 += try joltagePart1(line);
+        part2 += try joltagePart2(allocator, line);
     }
 
     return .{ .part1 = part1, .part2 = part2 };
 }
 
-fn joltagePart1(allocator: std.mem.Allocator, bank: []const u8) !usize {
-    var joltage_str = try allocator.alloc(u8, 2);
-    defer allocator.free(joltage_str);
-    const upper = std.mem.indexOfMax(u8, bank[0 .. bank.len - 1]);
-    const lower = std.mem.indexOfMax(u8, bank[upper + 1 .. bank.len]);
-    joltage_str[0] = bank[upper];
-    joltage_str[1] = bank[lower + upper + 1];
-    return try std.fmt.parseInt(usize, joltage_str, 10);
+/// Finds the two largest digit characters and concatenates them
+fn joltagePart1(line: []const u8) !usize {
+    if (line.len < 2) return error.InvalidInput;
+
+    // Find first maximum in the line (excluding last char)
+    const first_max_idx = std.mem.indexOfMax(u8, line[0 .. line.len - 1]);
+
+    // Find second maximum in remaining portion
+    const second_max_idx = std.mem.indexOfMax(u8, line[first_max_idx + 1 ..]);
+
+    // Build 2-digit number
+    const result = [2]u8{ line[first_max_idx], line[second_max_idx + first_max_idx + 1] };
+
+    return try std.fmt.parseInt(usize, &result, 10);
 }
 
-fn joltagePart2(allocator: std.mem.Allocator, bank: []const u8) !usize {
-    const JOLTAGE_LENGTH = 12;
-    var joltage_str = try allocator.alloc(u8, JOLTAGE_LENGTH);
-    defer allocator.free(joltage_str);
+/// Finds the 12 largest digit characters sequentially and concatenates them
+fn joltagePart2(allocator: std.mem.Allocator, line: []const u8) !usize {
+    const DIGIT_COUNT = 12;
+    if (line.len < DIGIT_COUNT) return error.InvalidInput;
 
-    var prev_index: usize = 0;
-    for (0..JOLTAGE_LENGTH) |i| {
-        const value = std.mem.indexOfMax(u8, bank[prev_index .. bank.len - (JOLTAGE_LENGTH - i - 1)]);
-        joltage_str[i] = bank[value + prev_index];
-        prev_index += value + 1;
+    var result_str = try allocator.alloc(u8, DIGIT_COUNT);
+    defer allocator.free(result_str);
+
+    var start_idx: usize = 0;
+    for (0..DIGIT_COUNT) |i| {
+        // Search space shrinks from the end as we find more digits
+        const search_end = line.len - (DIGIT_COUNT - i - 1);
+        const max_idx = std.mem.indexOfMax(u8, line[start_idx..search_end]);
+
+        result_str[i] = line[start_idx + max_idx];
+        start_idx += max_idx + 1;
     }
-    return try std.fmt.parseInt(usize, joltage_str, 10);
+
+    return try std.fmt.parseInt(usize, result_str, 10);
 }
 
 test "part 1" {
