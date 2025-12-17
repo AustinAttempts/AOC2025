@@ -1,5 +1,10 @@
 const std = @import("std");
 
+const Solution = struct {
+    part1: usize,
+    part2: usize,
+};
+
 const Coord = struct { x: usize, y: usize };
 const Rect = struct {
     a: Coord,
@@ -24,11 +29,84 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     const input = @embedFile("inputs/day09.txt");
-    std.debug.print("Part 1 Answer: {d}\n", .{try part1(allocator, input)});
-    std.debug.print("Part 2 Answer: {d}\n", .{try part2(allocator, input)});
+    const solution = try movieTheatre(allocator, input);
+
+    std.debug.print("Part 1 Answer: {d}\n", .{solution.part1});
+    std.debug.print("Part 2 Answer: {d}\n", .{solution.part2});
 
     const elapsed = timer.read();
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
+}
+
+fn movieTheatre(allocator: std.mem.Allocator, input: []const u8) !Solution {
+    var coords: std.ArrayList(Coord) = .empty;
+    defer _ = coords.deinit(allocator);
+    var lines = std.mem.splitScalar(u8, input, '\n');
+    while (lines.next()) |line| {
+        if (line.len == 0) continue;
+        var values = std.mem.splitScalar(u8, line, ',');
+        const x = try std.fmt.parseInt(usize, values.next().?, 10);
+        const y = try std.fmt.parseInt(usize, values.next().?, 10);
+        const coord: Coord = .{ .x = x, .y = y };
+        try coords.append(allocator, coord);
+    }
+
+    // Find min values for normalization
+    var min_x: usize = std.math.maxInt(usize);
+    var min_y: usize = std.math.maxInt(usize);
+    for (coords.items) |coord| {
+        min_x = @min(min_x, coord.x);
+        min_y = @min(min_y, coord.y);
+    }
+
+    // Normalize coordinates
+    var coords_normed: std.ArrayList(Coord) = .empty;
+    defer _ = coords_normed.deinit(allocator);
+    for (coords.items) |coord| {
+        try coords_normed.append(allocator, .{ .x = coord.x - min_x, .y = coord.y - min_y });
+    }
+
+    // Find bounds after normalization
+    var max_x: usize = 0;
+    var max_y: usize = 0;
+    for (coords_normed.items) |coord| {
+        max_x = @max(max_x, coord.x);
+        max_y = @max(max_y, coord.y);
+    }
+
+    // The simple_polygon is the ordered list of normalized coordinates (the boundary)
+    const simple_polygon = coords_normed.items;
+
+    // Output vertices for visualization
+    try outputPolygonToText(allocator, simple_polygon, "polygon_vertices.csv");
+
+    var rectangles: std.ArrayList(Rect) = .empty;
+    defer _ = rectangles.deinit(allocator);
+
+    // Calculate all possible rectangles using normalized coordinates
+    var rects: std.ArrayList(Rect) = .empty;
+    defer _ = rects.deinit(allocator);
+
+    for (coords_normed.items, 0..) |edge1, i| {
+        for (coords_normed.items[i + 1 ..]) |edge2| {
+            try rects.append(allocator, Rect.init(edge1, edge2));
+        }
+    }
+
+    // Sort rects in descending order by area
+    std.mem.sort(Rect, rects.items, {}, rectCmp);
+    const part1: usize = rects.items[0].area;
+
+    // Check each rectangle to see if it's inside the simple polygon
+    var part2: usize = 0;
+    for (rects.items) |rect| {
+        if (rectangleInsideSimplePolygon(rect, simple_polygon)) {
+            part2 = rect.area;
+            break;
+        }
+    }
+
+    return .{ .part1 = part1, .part2 = part2 };
 }
 
 fn rectCmp(context: void, a: Rect, b: Rect) bool {
@@ -65,118 +143,6 @@ fn outputPolygonToText(allocator: std.mem.Allocator, polygon: []const Coord, fil
         const line_len = try std.fmt.bufPrint(&buffer, "{d},{d}\n", .{ coord.x, coord.y });
         try file.writeAll(line_len);
     }
-}
-
-fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
-    var coords: std.ArrayList(Coord) = .empty;
-    defer _ = coords.deinit(allocator);
-    var lines = std.mem.splitScalar(u8, input, '\n');
-    while (lines.next()) |line| {
-        if (line.len == 0) continue;
-        var values = std.mem.splitScalar(u8, line, ',');
-        const x = try std.fmt.parseInt(usize, values.next().?, 10);
-        const y = try std.fmt.parseInt(usize, values.next().?, 10);
-        const coord: Coord = .{ .x = x, .y = y };
-        try coords.append(allocator, coord);
-    }
-
-    var rectangles: std.ArrayList(Rect) = .empty;
-    defer _ = rectangles.deinit(allocator);
-
-    var max_area: usize = 0;
-    for (coords.items, 0..) |start, i| {
-        for (coords.items[i + 1 ..]) |end| {
-            const rect = Rect.init(start, end);
-            try rectangles.append(allocator, rect);
-            if (rect.area > max_area) {
-                max_area = rect.area;
-            }
-        }
-    }
-
-    return max_area;
-}
-
-fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
-    var coords: std.ArrayList(Coord) = .empty;
-    defer _ = coords.deinit(allocator);
-    var lines = std.mem.splitScalar(u8, input, '\n');
-    while (lines.next()) |line| {
-        if (line.len == 0) continue;
-        var values = std.mem.splitScalar(u8, line, ',');
-        const x = try std.fmt.parseInt(usize, values.next().?, 10);
-        const y = try std.fmt.parseInt(usize, values.next().?, 10);
-        const coord: Coord = .{ .x = x, .y = y };
-        try coords.append(allocator, coord);
-    }
-
-    std.debug.print("Total coordinates: {d}\n", .{coords.items.len});
-
-    // Find min values for normalization
-    var min_x: usize = std.math.maxInt(usize);
-    var min_y: usize = std.math.maxInt(usize);
-    for (coords.items) |coord| {
-        min_x = @min(min_x, coord.x);
-        min_y = @min(min_y, coord.y);
-    }
-
-    // Normalize coordinates
-    var coords_normed: std.ArrayList(Coord) = .empty;
-    defer _ = coords_normed.deinit(allocator);
-    for (coords.items) |coord| {
-        try coords_normed.append(allocator, .{ .x = coord.x - min_x, .y = coord.y - min_y });
-    }
-
-    std.debug.print("Normalized coordinates (offset by {d},{d})\n", .{ min_x, min_y });
-
-    // Find bounds after normalization
-    var max_x: usize = 0;
-    var max_y: usize = 0;
-    for (coords_normed.items) |coord| {
-        max_x = @max(max_x, coord.x);
-        max_y = @max(max_y, coord.y);
-    }
-    std.debug.print("Normalized bounds: {d} x {d}\n", .{ max_x, max_y });
-
-    // The simple_polygon is the ordered list of normalized coordinates (the boundary)
-    const simple_polygon = coords_normed.items;
-    std.debug.print("Polygon has {d} points\n", .{simple_polygon.len});
-
-    // Output vertices for visualization
-    try outputPolygonToText(allocator, simple_polygon, "polygon_vertices.csv");
-    std.debug.print("Polygon vertices written to polygon_vertices.csv\n", .{});
-
-    // Calculate all possible rectangles using normalized coordinates
-    std.debug.print("Calculating rectangles...\n", .{});
-    var rects: std.ArrayList(Rect) = .empty;
-    defer _ = rects.deinit(allocator);
-
-    for (coords_normed.items, 0..) |edge1, i| {
-        for (coords_normed.items[i + 1 ..]) |edge2| {
-            try rects.append(allocator, Rect.init(edge1, edge2));
-        }
-    }
-
-    // Sort rects in descending order by area
-    std.mem.sort(Rect, rects.items, {}, rectCmp);
-    std.debug.print("Checking {d} rectangles...\n", .{rects.items.len});
-
-    // Check each rectangle to see if it's inside the simple polygon
-    var checked: usize = 0;
-    for (rects.items) |rect| {
-        checked += 1;
-        if (checked % 50 == 0) {
-            std.debug.print("Checked {d}/{d} rectangles...\n", .{ checked, rects.items.len });
-        }
-
-        if (rectangleInsideSimplePolygon(rect, simple_polygon)) {
-            std.debug.print("Found valid rect: ({d},{d})-({d},{d}) area={d}\n", .{ rect.a.x, rect.a.y, rect.b.x, rect.b.y, rect.area });
-            return rect.area;
-        }
-    }
-
-    std.debug.print("No valid rectangle found!\n", .{});
-    return 0;
 }
 
 // Checks if a point is strictly inside the rectangle (excluding edges)
@@ -284,8 +250,7 @@ test "part 1" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    std.debug.print("\nRunning part 1 test...\n", .{});
-    try std.testing.expectEqual(50, try part1(allocator, input));
+    try std.testing.expectEqual(50, (try movieTheatre(allocator, input)).part1);
 }
 
 test "part 2" {
@@ -294,6 +259,5 @@ test "part 2" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    std.debug.print("\nRunning part 2 test...\n", .{});
-    try std.testing.expectEqual(24, try part2(allocator, input));
+    try std.testing.expectEqual(24, (try movieTheatre(allocator, input)).part2);
 }
