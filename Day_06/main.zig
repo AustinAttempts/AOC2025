@@ -5,6 +5,31 @@ const Solution = struct {
     part2: usize,
 };
 
+const Grid = struct {
+    rows: std.ArrayList(std.ArrayList(u8)),
+    allocator: std.mem.Allocator,
+
+    fn deinit(self: *Grid) void {
+        for (self.rows.items) |*row| {
+            row.deinit(self.allocator);
+        }
+        self.rows.deinit(self.allocator);
+    }
+
+    fn height(self: Grid) usize {
+        return self.rows.items.len;
+    }
+
+    fn width(self: Grid) usize {
+        if (self.rows.items.len == 0) return 0;
+        return self.rows.items[0].items.len;
+    }
+
+    fn operatorRow(self: Grid) usize {
+        return self.height() - 1;
+    }
+};
+
 pub fn main() !void {
     var timer = try std.time.Timer.start();
 
@@ -14,115 +39,204 @@ pub fn main() !void {
 
     const input = @embedFile("inputs/day06.txt");
     const solution = try trashCompactor(allocator, input);
+
     std.debug.print("Part 1 Answer: {d}\n", .{solution.part1});
     std.debug.print("Part 2 Answer: {d}\n", .{solution.part2});
 
     const elapsed = timer.read();
-    std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
+    const elapsed_ms = @as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms;
+    std.debug.print("Run Time: {d:.2}ms\n", .{elapsed_ms});
 }
 
 fn trashCompactor(allocator: std.mem.Allocator, input: []const u8) !Solution {
-    // Part 1: Parse whitespace-separated numbers in columns
-    var part1_grid = std.ArrayList(std.ArrayList([]const u8)){};
-    defer {
-        for (part1_grid.items) |*row| {
+    // Parse once into character grid
+    var grid = try parseGrid(allocator, input);
+    defer grid.deinit();
+
+    // Extract whitespace-separated columns for Part 1
+    var columns = try extractColumns(allocator, grid);
+    defer freeColumns(allocator, &columns);
+
+    const part1 = try solvePart1(columns, grid);
+    const part2 = try solvePart2(allocator, grid);
+
+    return Solution{ .part1 = part1, .part2 = part2 };
+}
+
+// Parse input into a character-based grid (parse once!)
+fn parseGrid(allocator: std.mem.Allocator, input: []const u8) !Grid {
+    var rows = std.ArrayList(std.ArrayList(u8)){};
+    errdefer {
+        for (rows.items) |*row| {
             row.deinit(allocator);
         }
-        part1_grid.deinit(allocator);
+        rows.deinit(allocator);
     }
 
     var lines = std.mem.splitScalar(u8, input, '\n');
     while (lines.next()) |line| {
         if (line.len == 0) continue;
 
-        var row = std.ArrayList([]const u8){};
-        var tokens = std.mem.splitAny(u8, line, " \t");
-        while (tokens.next()) |token| {
-            const cleaned = std.mem.trim(u8, token, " \t");
-            if (cleaned.len > 0) {
-                try row.append(allocator, cleaned);
-            }
-        }
-        try part1_grid.append(allocator, row);
-    }
-
-    const part1 = try calcCols(part1_grid);
-
-    // Part 2: Parse character-by-character grid
-    var part2_grid = std.ArrayList(std.ArrayList(u8)){};
-    defer {
-        for (part2_grid.items) |*row| {
-            row.deinit(allocator);
-        }
-        part2_grid.deinit(allocator);
-    }
-
-    lines = std.mem.splitScalar(u8, input, '\n');
-    while (lines.next()) |line| {
-        if (line.len == 0) continue;
-
         var row = std.ArrayList(u8){};
+        errdefer row.deinit(allocator);
+
         for (line) |char| {
             try row.append(allocator, char);
         }
-        try part2_grid.append(allocator, row);
+
+        try rows.append(allocator, row);
     }
 
-    const part2 = try calcPart2(allocator, part2_grid);
-
-    return Solution{ .part1 = part1, .part2 = part2 };
+    return Grid{ .rows = rows, .allocator = allocator };
 }
 
-fn calcPart2(allocator: std.mem.Allocator, grid: std.ArrayList(std.ArrayList(u8))) !usize {
-    if (grid.items.len == 0) return 0;
+// Extract whitespace-separated values from the character grid
+fn extractColumns(allocator: std.mem.Allocator, grid: Grid) !std.ArrayList(std.ArrayList([]const u8)) {
+    var columns = std.ArrayList(std.ArrayList([]const u8)){};
+    errdefer freeColumns(allocator, &columns);
 
-    const num_cols = grid.items[0].items.len;
-    const last_row_idx = grid.items.len - 1;
+    for (grid.rows.items) |row| {
+        var col_values = std.ArrayList([]const u8){};
+        errdefer col_values.deinit(allocator);
 
-    // Extract vertical numbers from right to left
-    var col_numbers = std.ArrayList([]const u8){};
-    defer {
-        for (col_numbers.items) |str| {
-            allocator.free(str);
+        var current_value = std.ArrayList(u8){};
+        defer current_value.deinit(allocator);
+
+        for (row.items) |char| {
+            if (char == ' ' or char == '\t') {
+                // End of a value
+                if (current_value.items.len > 0) {
+                    const owned = try current_value.toOwnedSlice(allocator);
+                    try col_values.append(allocator, owned);
+                    current_value = std.ArrayList(u8){};
+                }
+            } else {
+                try current_value.append(allocator, char);
+            }
         }
-        col_numbers.deinit(allocator);
+
+        // Don't forget the last value
+        if (current_value.items.len > 0) {
+            const owned = try current_value.toOwnedSlice(allocator);
+            try col_values.append(allocator, owned);
+        }
+
+        try columns.append(allocator, col_values);
     }
 
+    return columns;
+}
+
+fn freeColumns(allocator: std.mem.Allocator, columns: *std.ArrayList(std.ArrayList([]const u8))) void {
+    for (columns.items) |*row| {
+        for (row.items) |value| {
+            allocator.free(value);
+        }
+        row.deinit(allocator);
+    }
+    columns.deinit(allocator);
+}
+
+// Part 1: Calculate column equations using extracted values
+fn solvePart1(columns: std.ArrayList(std.ArrayList([]const u8)), grid: Grid) !usize {
+    if (columns.items.len == 0) return 0;
+
+    const num_cols = columns.items[0].items.len;
+    const operator_row_idx = grid.operatorRow();
+    var total: usize = 0;
+
+    for (0..num_cols) |col_idx| {
+        var column_result: usize = 0;
+
+        // Process each row in the column (except operator row)
+        for (columns.items[0..operator_row_idx], 0..) |row, row_idx| {
+            const value_str = row.items[col_idx];
+            const value = try std.fmt.parseInt(usize, value_str, 10);
+
+            if (row_idx == 0) {
+                column_result = value;
+            } else {
+                const operator = columns.items[operator_row_idx].items[col_idx][0];
+                column_result = try applyOperator(column_result, operator, value);
+            }
+        }
+
+        total += column_result;
+    }
+
+    return total;
+}
+
+// Part 2: Calculate using vertical numbers from character grid
+fn solvePart2(allocator: std.mem.Allocator, grid: Grid) !usize {
+    if (grid.height() == 0) return 0;
+
+    // Extract vertical numbers from each column (right to left)
+    var vertical_numbers = try extractVerticalNumbers(allocator, grid);
+    defer freeVerticalNumbers(allocator, &vertical_numbers);
+
+    // Process operators and calculate result
+    return try processOperators(vertical_numbers, grid.rows.items[grid.operatorRow()], grid.width());
+}
+
+// Extract numbers reading vertically down each column
+fn extractVerticalNumbers(allocator: std.mem.Allocator, grid: Grid) !std.ArrayList([]const u8) {
+    const num_cols = grid.width();
+    const operator_row_idx = grid.operatorRow();
+
+    var numbers = std.ArrayList([]const u8){};
+    errdefer freeVerticalNumbers(allocator, &numbers);
+
+    // Process columns from right to left
     var col: usize = num_cols;
     while (col > 0) {
         col -= 1;
+
         var digits = std.ArrayList(u8){};
         defer digits.deinit(allocator);
 
-        // Collect non-space characters from top to second-to-last row
-        for (grid.items[0..last_row_idx]) |row| {
+        // Collect digits from top to operator row
+        for (grid.rows.items[0..operator_row_idx]) |row| {
             const char = row.items[col];
             if (char != ' ') {
                 try digits.append(allocator, char);
             }
         }
-        try col_numbers.append(allocator, try digits.toOwnedSlice(allocator));
+
+        try numbers.append(allocator, try digits.toOwnedSlice(allocator));
     }
 
-    // Process operators right to left
+    return numbers;
+}
+
+fn freeVerticalNumbers(allocator: std.mem.Allocator, numbers: *std.ArrayList([]const u8)) void {
+    for (numbers.items) |str| {
+        allocator.free(str);
+    }
+    numbers.deinit(allocator);
+}
+
+// Process operators from right to left, grouping numbers
+fn processOperators(numbers: std.ArrayList([]const u8), operator_row: std.ArrayList(u8), num_cols: usize) !usize {
     var total: usize = 0;
     var segment_start: usize = 0;
 
-    col = num_cols;
+    var col: usize = num_cols;
     while (col > 0) {
         col -= 1;
-        const operator = grid.items[last_row_idx].items[col];
+        const operator = operator_row.items[col];
 
         switch (operator) {
             '+', '*' => {
                 const segment_end = num_cols - col;
-                const result = try evaluateSegment(col_numbers.items[segment_start..segment_end], operator);
+                const segment = numbers.items[segment_start..segment_end];
+                const result = try evaluateSegment(segment, operator);
                 total += result;
                 segment_start = segment_end;
             },
             ' ' => {}, // Skip spaces
             else => {
-                std.debug.print("Unknown Operator: {c}\n", .{operator});
+                std.debug.print("Unknown operator: '{c}'\n", .{operator});
                 return error.InvalidOperator;
             },
         }
@@ -131,22 +245,21 @@ fn calcPart2(allocator: std.mem.Allocator, grid: std.ArrayList(std.ArrayList(u8)
     return total;
 }
 
-fn evaluateSegment(numbers: []const []const u8, operator: u8) !usize {
+// Evaluate a segment of numbers with a single operator
+fn evaluateSegment(number_strings: []const []const u8, operator: u8) !usize {
     var result: usize = 0;
 
-    for (numbers) |num_str| {
+    for (number_strings) |num_str| {
         if (num_str.len == 0) continue;
 
         const value = try std.fmt.parseInt(usize, num_str, 10);
 
         switch (operator) {
-            '+' => result += value,
+            '+' => {
+                result += value;
+            },
             '*' => {
-                if (result == 0) {
-                    result = value;
-                } else {
-                    result *= value;
-                }
+                result = if (result == 0) value else result * value;
             },
             else => return error.InvalidOperator,
         }
@@ -155,35 +268,13 @@ fn evaluateSegment(numbers: []const []const u8, operator: u8) !usize {
     return result;
 }
 
-fn calcCols(grid: std.ArrayList(std.ArrayList([]const u8))) !usize {
-    var sum: usize = 0;
-    const num_equations = grid.items[0].items.len; // Number of equations to calculate
-    var col: usize = 0;
-    while (col < num_equations) : (col += 1) {
-        var local_sum: usize = 0;
-        for (grid.items[0 .. grid.items.len - 1], 0..) |row, row_idx| {
-            const value = row.items[col];
-            if (row_idx == 0) {
-                local_sum = try std.fmt.parseInt(usize, value, 10);
-            } else {
-                const operator = grid.items[grid.items.len - 1].items[col][0];
-                switch (operator) {
-                    '+' => {
-                        local_sum += try std.fmt.parseInt(usize, value, 10);
-                    },
-                    '*' => {
-                        local_sum *= try std.fmt.parseInt(usize, value, 10);
-                    },
-                    else => {
-                        std.debug.print("Unkown Operator: {c}", .{operator});
-                        return error.InvalidOperator;
-                    },
-                }
-            }
-        }
-        sum += local_sum;
-    }
-    return sum;
+// Apply a single operation
+fn applyOperator(left: usize, operator: u8, right: usize) !usize {
+    return switch (operator) {
+        '+' => left + right,
+        '*' => left * right,
+        else => error.InvalidOperator,
+    };
 }
 
 test "part 1" {
@@ -192,25 +283,8 @@ test "part 1" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    try std.testing.expectEqual(4277556, (try trashCompactor(allocator, input)).part1);
-}
-
-test "split whitespace" {
-    const input = "123 328  51 64";
-    var splitter = std.mem.splitAny(u8, input, " \t");
-    var parts: std.ArrayList([]const u8) = .empty;
-    defer parts.deinit(std.testing.allocator);
-
-    while (splitter.next()) |part| {
-        const cleaned_part = std.mem.trim(u8, part, " \t");
-        if (cleaned_part.len == 0) continue;
-        try parts.append(std.testing.allocator, cleaned_part);
-    }
-
-    try std.testing.expectEqualSlices(u8, "123", parts.items[0]);
-    try std.testing.expectEqualSlices(u8, "328", parts.items[1]);
-    try std.testing.expectEqualSlices(u8, "51", parts.items[2]);
-    try std.testing.expectEqualSlices(u8, "64", parts.items[3]);
+    const result = try trashCompactor(allocator, input);
+    try std.testing.expectEqual(@as(usize, 4277556), result.part1);
 }
 
 test "part 2" {
@@ -219,5 +293,25 @@ test "part 2" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    try std.testing.expectEqual(3263827, (try trashCompactor(allocator, input)).part2);
+    const result = try trashCompactor(allocator, input);
+    try std.testing.expectEqual(@as(usize, 3263827), result.part2);
+}
+
+test "whitespace splitting" {
+    const input = "123 328  51 64";
+    var splitter = std.mem.splitAny(u8, input, " \t");
+    var parts = std.ArrayList([]const u8){};
+    defer parts.deinit(std.testing.allocator);
+
+    while (splitter.next()) |part| {
+        const trimmed = std.mem.trim(u8, part, " \t");
+        if (trimmed.len == 0) continue;
+        try parts.append(std.testing.allocator, trimmed);
+    }
+
+    try std.testing.expectEqual(@as(usize, 4), parts.items.len);
+    try std.testing.expectEqualSlices(u8, "123", parts.items[0]);
+    try std.testing.expectEqualSlices(u8, "328", parts.items[1]);
+    try std.testing.expectEqualSlices(u8, "51", parts.items[2]);
+    try std.testing.expectEqualSlices(u8, "64", parts.items[3]);
 }
