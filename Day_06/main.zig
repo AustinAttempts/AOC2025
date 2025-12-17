@@ -1,5 +1,10 @@
 const std = @import("std");
 
+const Solution = struct {
+    part1: usize,
+    part2: usize,
+};
+
 pub fn main() !void {
     var timer = try std.time.Timer.start();
 
@@ -8,11 +13,146 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     const input = @embedFile("inputs/day06.txt");
-    std.debug.print("Part 1 Answer: {d}\n", .{try part1(allocator, input)});
-    std.debug.print("Part 2 Answer: {d}\n", .{try part2(allocator, input)});
+    const solution = try trashCompactor(allocator, input);
+    std.debug.print("Part 1 Answer: {d}\n", .{solution.part1});
+    std.debug.print("Part 2 Answer: {d}\n", .{solution.part2});
 
     const elapsed = timer.read();
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
+}
+
+fn trashCompactor(allocator: std.mem.Allocator, input: []const u8) !Solution {
+    // Part 1: Parse whitespace-separated numbers in columns
+    var part1_grid = std.ArrayList(std.ArrayList([]const u8)){};
+    defer {
+        for (part1_grid.items) |*row| {
+            row.deinit(allocator);
+        }
+        part1_grid.deinit(allocator);
+    }
+
+    var lines = std.mem.splitScalar(u8, input, '\n');
+    while (lines.next()) |line| {
+        if (line.len == 0) continue;
+
+        var row = std.ArrayList([]const u8){};
+        var tokens = std.mem.splitAny(u8, line, " \t");
+        while (tokens.next()) |token| {
+            const cleaned = std.mem.trim(u8, token, " \t");
+            if (cleaned.len > 0) {
+                try row.append(allocator, cleaned);
+            }
+        }
+        try part1_grid.append(allocator, row);
+    }
+
+    const part1 = try calcCols(part1_grid);
+
+    // Part 2: Parse character-by-character grid
+    var part2_grid = std.ArrayList(std.ArrayList(u8)){};
+    defer {
+        for (part2_grid.items) |*row| {
+            row.deinit(allocator);
+        }
+        part2_grid.deinit(allocator);
+    }
+
+    lines = std.mem.splitScalar(u8, input, '\n');
+    while (lines.next()) |line| {
+        if (line.len == 0) continue;
+
+        var row = std.ArrayList(u8){};
+        for (line) |char| {
+            try row.append(allocator, char);
+        }
+        try part2_grid.append(allocator, row);
+    }
+
+    const part2 = try calcPart2(allocator, part2_grid);
+
+    return Solution{ .part1 = part1, .part2 = part2 };
+}
+
+fn calcPart2(allocator: std.mem.Allocator, grid: std.ArrayList(std.ArrayList(u8))) !usize {
+    if (grid.items.len == 0) return 0;
+
+    const num_cols = grid.items[0].items.len;
+    const last_row_idx = grid.items.len - 1;
+
+    // Extract vertical numbers from right to left
+    var col_numbers = std.ArrayList([]const u8){};
+    defer {
+        for (col_numbers.items) |str| {
+            allocator.free(str);
+        }
+        col_numbers.deinit(allocator);
+    }
+
+    var col: usize = num_cols;
+    while (col > 0) {
+        col -= 1;
+        var digits = std.ArrayList(u8){};
+        defer digits.deinit(allocator);
+
+        // Collect non-space characters from top to second-to-last row
+        for (grid.items[0..last_row_idx]) |row| {
+            const char = row.items[col];
+            if (char != ' ') {
+                try digits.append(allocator, char);
+            }
+        }
+        try col_numbers.append(allocator, try digits.toOwnedSlice(allocator));
+    }
+
+    // Process operators right to left
+    var total: usize = 0;
+    var segment_start: usize = 0;
+
+    col = num_cols;
+    while (col > 0) {
+        col -= 1;
+        const operator = grid.items[last_row_idx].items[col];
+
+        switch (operator) {
+            '+', '*' => {
+                const segment_end = num_cols - col;
+                const result = try evaluateSegment(col_numbers.items[segment_start..segment_end], operator);
+                total += result;
+                segment_start = segment_end;
+            },
+            ' ' => {}, // Skip spaces
+            else => {
+                std.debug.print("Unknown Operator: {c}\n", .{operator});
+                return error.InvalidOperator;
+            },
+        }
+    }
+
+    return total;
+}
+
+fn evaluateSegment(numbers: []const []const u8, operator: u8) !usize {
+    var result: usize = 0;
+
+    for (numbers) |num_str| {
+        if (num_str.len == 0) continue;
+
+        const value = try std.fmt.parseInt(usize, num_str, 10);
+
+        switch (operator) {
+            '+' => result += value,
+            '*' => {
+                if (result == 0) {
+                    result = value;
+                } else {
+                    result *= value;
+                }
+            },
+            else => return error.InvalidOperator,
+        }
+    }
+
+    return result;
 }
 
 fn calcCols(grid: std.ArrayList(std.ArrayList([]const u8))) !usize {
@@ -46,137 +186,13 @@ fn calcCols(grid: std.ArrayList(std.ArrayList([]const u8))) !usize {
     return sum;
 }
 
-fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
-    var grid: std.ArrayList(std.ArrayList([]const u8)) = .empty;
-    defer {
-        for (grid.items) |*row| {
-            row.deinit(allocator);
-        }
-        grid.deinit(allocator);
-    }
-
-    var lines = std.mem.splitScalar(u8, input, '\n');
-    while (lines.next()) |line| {
-        var vales = std.mem.splitAny(u8, line, " \t");
-        var operands: std.ArrayList([]const u8) = .empty;
-        while (vales.next()) |value| {
-            const cleaned_value = std.mem.trim(u8, value, " \t");
-            if (cleaned_value.len != 0) {
-                try operands.append(allocator, cleaned_value);
-            }
-        }
-        try grid.append(allocator, operands);
-    }
-
-    return calcCols(grid);
-}
-
-fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
-    var sum: usize = 0;
-
-    var grid: std.ArrayList(std.ArrayList(u8)) = .empty;
-    defer {
-        for (grid.items) |*row| {
-            row.deinit(allocator);
-        }
-        grid.deinit(allocator);
-    }
-
-    // Parse input into a 2D array of u8
-    var lines = std.mem.splitScalar(u8, input, '\n');
-    while (lines.next()) |line| {
-        var chars: std.ArrayList(u8) = .empty;
-        for (line) |char| {
-            try chars.append(allocator, char);
-        }
-        try grid.append(allocator, chars);
-    }
-
-    var math_values: std.ArrayList([]const u8) = .empty;
-    defer {
-        for (math_values.items) |str| {
-            allocator.free(str);
-        }
-        math_values.deinit(allocator);
-    }
-
-    // Parse the 2D array for verticle numbers
-    const num_cols = grid.items[0].items.len;
-    var col: usize = num_cols;
-    while (col > 0) {
-        col -= 1;
-        var numbers: std.ArrayList(u8) = .empty;
-        defer numbers.deinit(allocator);
-        for (grid.items[0 .. grid.items.len - 1]) |row| {
-            const value = row.items[col];
-            if (value != ' ') {
-                try numbers.append(allocator, value);
-            }
-        }
-        try math_values.append(allocator, try numbers.toOwnedSlice(allocator));
-    }
-
-    // Calculate columns right to left
-    var upper = num_cols - 1;
-    col = num_cols;
-    while (col > 0) {
-        col -= 1;
-        switch (grid.items[grid.items.len - 1].items[col]) {
-            '+' => {
-                var local_sum: usize = 0;
-                const right_lim = num_cols - upper - 1;
-                const left_lim = num_cols - col;
-                for (math_values.items[right_lim..left_lim]) |value| {
-                    if (value.len != 0) {
-                        const value_int = try std.fmt.parseInt(usize, value, 10);
-                        local_sum += value_int;
-                    }
-                }
-                sum += local_sum;
-                if (col > 0) {
-                    upper = col - 1;
-                }
-            },
-            '*' => {
-                var local_sum: usize = 0;
-                const right_lim = num_cols - upper - 1;
-                const left_lim = num_cols - col;
-                for (math_values.items[right_lim..left_lim]) |value| {
-                    if (value.len != 0) {
-                        const value_int = try std.fmt.parseInt(usize, value, 10);
-                        if (local_sum == 0) {
-                            local_sum = value_int;
-                        } else {
-                            local_sum *= value_int;
-                        }
-                    }
-                }
-                sum += local_sum;
-                if (col > 0) {
-                    upper = col - 1;
-                }
-            },
-            ' ' => {
-                // Do nothing
-            },
-            else => {
-                std.debug.print("Unkown Operator: {c}", .{grid.items[grid.items.len - 1].items[col]});
-                return error.InvalidOperator;
-            },
-        }
-    }
-
-    return sum;
-}
-
 test "part 1" {
     const input = @embedFile("inputs/test_case.txt");
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    std.debug.print("\nRunning part 1 test...\n", .{});
-    try std.testing.expectEqual(4277556, try part1(allocator, input));
+    try std.testing.expectEqual(4277556, (try trashCompactor(allocator, input)).part1);
 }
 
 test "split whitespace" {
@@ -203,6 +219,5 @@ test "part 2" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    std.debug.print("\nRunning part 2 test...\n", .{});
-    try std.testing.expectEqual(3263827, try part2(allocator, input));
+    try std.testing.expectEqual(3263827, (try trashCompactor(allocator, input)).part2);
 }
