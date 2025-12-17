@@ -5,16 +5,26 @@ const Solution = struct {
     part2: usize,
 };
 
-const RELEVANT_CIRCUITS_CNT: usize = 3;
+const TOP_CIRCUITS_COUNT: usize = 3;
 
-const Coord = struct { x: usize, y: usize, z: usize, id: usize, str: []const u8 };
+const Coord = struct {
+    x: usize,
+    y: usize,
+    z: usize,
+    id: usize,
+};
+
 const Connection = struct {
-    a: Coord,
-    b: Coord,
+    a_id: usize,
+    b_id: usize,
     dist: usize,
 
     fn init(a: Coord, b: Coord) Connection {
-        return .{ .a = a, .b = b, .dist = distance(a, b) };
+        return .{
+            .a_id = a.id,
+            .b_id = b.id,
+            .dist = distance(a, b),
+        };
     }
 
     fn distance(a: Coord, b: Coord) usize {
@@ -34,16 +44,23 @@ const UnionFind = struct {
 
     fn init(allocator: std.mem.Allocator, n: usize) !UnionFind {
         const parent = try allocator.alloc(usize, n);
+        errdefer allocator.free(parent);
         const rank = try allocator.alloc(usize, n);
+        errdefer allocator.free(rank);
         const size = try allocator.alloc(usize, n);
 
         for (0..n) |i| {
-            parent[i] = i; // Initalize all elements are in their own set
-            rank[i] = 0; // Size of this set
+            parent[i] = i; // Initialize all elements in their own set
+            rank[i] = 0;
             size[i] = 1;
         }
 
-        return .{ .parent = parent, .rank = rank, .size = size, .allocator = allocator };
+        return .{
+            .parent = parent,
+            .rank = rank,
+            .size = size,
+            .allocator = allocator,
+        };
     }
 
     fn deinit(self: *UnionFind) void {
@@ -52,7 +69,7 @@ const UnionFind = struct {
         self.allocator.free(self.size);
     }
 
-    // Return representative of X's set
+    /// Return representative of X's set
     fn find(self: *UnionFind, x: usize) usize {
         if (self.parent[x] != x) {
             self.parent[x] = self.find(self.parent[x]);
@@ -60,7 +77,8 @@ const UnionFind = struct {
         return self.parent[x];
     }
 
-    // Unites the set that includes X and the set that includes Y
+    /// Unites the set that includes X and the set that includes Y
+    /// Returns true if the sets were merged, false if they were already in the same set
     fn unite(self: *UnionFind, x: usize, y: usize) bool {
         // Find representative of each set
         const root_x = self.find(x);
@@ -78,7 +96,7 @@ const UnionFind = struct {
             self.parent[root_y] = root_x;
             self.size[root_x] += self.size[root_y];
         } else {
-            // If ranks are the same move Y under X (dosen't matter)
+            // If ranks are the same move Y under X (doesn't matter)
             self.parent[root_y] = root_x;
             self.rank[root_x] += 1;
             self.size[root_x] += self.size[root_y];
@@ -98,45 +116,6 @@ const UnionFind = struct {
         }
         return count;
     }
-
-    fn print(self: *UnionFind, allocator: std.mem.Allocator) !void {
-        const n = self.parent.len;
-
-        // Map root → dynamic array of members
-        var components = std.AutoHashMap(usize, std.ArrayList(usize)).init(allocator);
-        defer {
-            var iter = components.valueIterator();
-            while (iter.next()) |list| list.deinit(allocator);
-            components.deinit();
-        }
-
-        // Build component lists
-        for (0..n) |i| {
-            const root = self.find(i);
-
-            var entry = try components.getOrPut(root);
-            if (!entry.found_existing) {
-                entry.value_ptr.* = .empty;
-            }
-            try entry.value_ptr.append(allocator, i);
-        }
-
-        // Print
-        std.debug.print("==== UnionFind Components ====\n", .{});
-
-        var iter = components.iterator();
-        while (iter.next()) |entry| {
-            const root = entry.key_ptr.*;
-            const list = entry.value_ptr.*;
-
-            std.debug.print("Circuit (root {d}): ", .{root});
-            for (list.items, 0..) |member, idx| {
-                if (idx > 0) std.debug.print(", ", .{});
-                std.debug.print("{d}", .{member});
-            }
-            std.debug.print("\n", .{});
-        }
-    }
 };
 
 pub fn main() !void {
@@ -147,7 +126,7 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     const input = @embedFile("inputs/day08.txt");
-    const solution = try playground(allocator, input, 1000);
+    const solution = try solve(allocator, input, 1000);
     std.debug.print("Part 1 Answer: {d}\n", .{solution.part1});
     std.debug.print("Part 2 Answer: {d}\n", .{solution.part2});
 
@@ -155,22 +134,30 @@ pub fn main() !void {
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
 }
 
-fn playground(allocator: std.mem.Allocator, input: []const u8, pairs: usize) !Solution {
-    var coords: std.ArrayList(Coord) = .empty;
-    defer _ = coords.deinit(allocator);
+/// Solve the circuit connection problem using Kruskal's algorithm
+/// connections_to_add: Number of shortest connections to add for part 1
+fn solve(allocator: std.mem.Allocator, input: []const u8, connections_to_add: usize) !Solution {
+    if (input.len == 0) return .{ .part1 = 0, .part2 = 0 };
 
-    // Parse input into list of coordinates where each line is the index of that coordinate.
+    var coords: std.ArrayList(Coord) = .empty;
+    defer coords.deinit(allocator);
+
+    // Parse input into list of coordinates where each line is the index of that coordinate
     var lines = std.mem.splitScalar(u8, input, '\n');
     while (lines.next()) |line| {
+        if (line.len == 0) continue; // Skip empty lines
+
         var values = std.mem.splitScalar(u8, line, ',');
         const x = try std.fmt.parseInt(usize, values.next().?, 10);
         const y = try std.fmt.parseInt(usize, values.next().?, 10);
         const z = try std.fmt.parseInt(usize, values.next().?, 10);
 
         const idx = coords.items.len;
-        const coord: Coord = .{ .x = x, .y = y, .z = z, .id = idx, .str = line };
+        const coord: Coord = .{ .x = x, .y = y, .z = z, .id = idx };
         try coords.append(allocator, coord);
     }
+
+    if (coords.items.len == 0) return .{ .part1 = 0, .part2 = 0 };
 
     var connections: std.ArrayList(Connection) = .empty;
     defer connections.deinit(allocator);
@@ -182,7 +169,7 @@ fn playground(allocator: std.mem.Allocator, input: []const u8, pairs: usize) !So
         }
     }
 
-    // Sort connections by distance
+    // Sort connections by distance (Kruskal's algorithm)
     std.mem.sort(Connection, connections.items, {}, struct {
         fn lessThan(context: void, a: Connection, b: Connection) bool {
             _ = context;
@@ -190,42 +177,49 @@ fn playground(allocator: std.mem.Allocator, input: []const u8, pairs: usize) !So
         }
     }.lessThan);
 
+    // Part 1: Build circuits using the first N shortest connections
     var uf = try UnionFind.init(allocator, coords.items.len);
     defer uf.deinit();
 
-    // Build circuits starting from closest connections
-    for (connections.items[0..pairs]) |conn| {
-        _ = uf.unite(conn.a.id, conn.b.id);
+    const num_connections = @min(connections_to_add, connections.items.len);
+    for (connections.items[0..num_connections]) |conn| {
+        _ = uf.unite(conn.a_id, conn.b_id);
     }
+
+    // Collect all unique component sizes
     var component_sizes: std.ArrayList(usize) = .empty;
     defer component_sizes.deinit(allocator);
 
-    var seen = std.AutoHashMap(usize, void).init(allocator);
-    defer seen.deinit();
+    var seen_roots = std.AutoHashMap(usize, void).init(allocator);
+    defer seen_roots.deinit();
 
     for (0..coords.items.len) |i| {
         const root = uf.find(i);
-        if (!seen.contains(root)) {
-            try seen.put(root, {});
+        if (!seen_roots.contains(root)) {
+            try seen_roots.put(root, {});
             try component_sizes.append(allocator, uf.getSize(root));
         }
     }
 
-    // Sort circuits by size
+    // Sort circuits by size (descending)
     std.mem.sort(usize, component_sizes.items, {}, std.sort.desc(usize));
 
-    // Calulate answer from largest 3 circuits
+    // Calculate answer from largest circuits
     var part1: usize = 1;
-    for (component_sizes.items[0..RELEVANT_CIRCUITS_CNT]) |size| {
+    const circuits_to_multiply = @min(TOP_CIRCUITS_COUNT, component_sizes.items.len);
+    for (component_sizes.items[0..circuits_to_multiply]) |size| {
         part1 *= size;
     }
 
-    // Build circuits starting from closest connections until all are connected
+    // Part 2: Build circuits until all coordinates are in one component
     var part2: usize = 0;
     for (connections.items) |conn| {
-        if (uf.unite(conn.a.id, conn.b.id)) {
+        if (uf.unite(conn.a_id, conn.b_id)) {
             if (uf.numComponents() == 1) {
-                part2 = conn.a.x * conn.b.x;
+                // Get the original coordinates
+                const coord_a = coords.items[conn.a_id];
+                const coord_b = coords.items[conn.b_id];
+                part2 = coord_a.x * coord_b.x;
                 break;
             }
         }
@@ -240,7 +234,7 @@ test "part 1" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    try std.testing.expectEqual(40, (try playground(allocator, input, 10)).part1);
+    try std.testing.expectEqual(40, (try solve(allocator, input, 10)).part1);
 }
 
 test "part 2" {
@@ -249,5 +243,5 @@ test "part 2" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    try std.testing.expectEqual(25272, (try playground(allocator, input, 10)).part2);
+    try std.testing.expectEqual(25272, (try solve(allocator, input, 10)).part2);
 }
