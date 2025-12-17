@@ -1,5 +1,10 @@
 const std = @import("std");
 
+const Solution = struct {
+    part1: usize,
+    part2: usize,
+};
+
 const RELEVANT_CIRCUITS_CNT: usize = 3;
 
 const Coord = struct { x: usize, y: usize, z: usize, id: usize, str: []const u8 };
@@ -142,14 +147,15 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     const input = @embedFile("inputs/day08.txt");
-    std.debug.print("Part 1 Answer: {d}\n", .{try part1(allocator, input, 1000)});
-    std.debug.print("Part 2 Answer: {d}\n", .{try part2(allocator, input)});
+    const solution = try playground(allocator, input, 1000);
+    std.debug.print("Part 1 Answer: {d}\n", .{solution.part1});
+    std.debug.print("Part 2 Answer: {d}\n", .{solution.part2});
 
     const elapsed = timer.read();
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
 }
 
-fn part1(allocator: std.mem.Allocator, input: []const u8, pairs: usize) !usize {
+fn playground(allocator: std.mem.Allocator, input: []const u8, pairs: usize) !Solution {
     var coords: std.ArrayList(Coord) = .empty;
     defer _ = coords.deinit(allocator);
 
@@ -191,9 +197,6 @@ fn part1(allocator: std.mem.Allocator, input: []const u8, pairs: usize) !usize {
     for (connections.items[0..pairs]) |conn| {
         _ = uf.unite(conn.a.id, conn.b.id);
     }
-
-    try uf.print(allocator);
-
     var component_sizes: std.ArrayList(usize) = .empty;
     defer component_sizes.deinit(allocator);
 
@@ -212,65 +215,23 @@ fn part1(allocator: std.mem.Allocator, input: []const u8, pairs: usize) !usize {
     std.mem.sort(usize, component_sizes.items, {}, std.sort.desc(usize));
 
     // Calulate answer from largest 3 circuits
-    std.debug.print("{d} Largest circuit sizes: ", .{RELEVANT_CIRCUITS_CNT});
-    var result: usize = 1;
+    var part1: usize = 1;
     for (component_sizes.items[0..RELEVANT_CIRCUITS_CNT]) |size| {
-        std.debug.print("{d} ", .{size});
-        result *= size;
+        part1 *= size;
     }
-    std.debug.print("\n", .{});
-
-    return result;
-}
-
-fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
-    var coords: std.ArrayList(Coord) = .empty;
-    defer _ = coords.deinit(allocator);
-
-    // Parse input into list of coordinates where each line is the index of that coordinate.
-    var lines = std.mem.splitScalar(u8, input, '\n');
-    while (lines.next()) |line| {
-        var values = std.mem.splitScalar(u8, line, ',');
-        const x = try std.fmt.parseInt(usize, values.next().?, 10);
-        const y = try std.fmt.parseInt(usize, values.next().?, 10);
-        const z = try std.fmt.parseInt(usize, values.next().?, 10);
-
-        const idx = coords.items.len;
-        const coord: Coord = .{ .x = x, .y = y, .z = z, .id = idx, .str = line };
-        try coords.append(allocator, coord);
-    }
-
-    var connections: std.ArrayList(Connection) = .empty;
-    defer connections.deinit(allocator);
-
-    // Create list of all possible connections between coordinates
-    for (coords.items, 0..) |start, i| {
-        for (coords.items[i + 1 ..]) |end| {
-            try connections.append(allocator, Connection.init(start, end));
-        }
-    }
-
-    // Sort connections by distance
-    std.mem.sort(Connection, connections.items, {}, struct {
-        fn lessThan(context: void, a: Connection, b: Connection) bool {
-            _ = context;
-            return a.dist < b.dist;
-        }
-    }.lessThan);
-
-    var uf = try UnionFind.init(allocator, coords.items.len);
-    defer uf.deinit();
 
     // Build circuits starting from closest connections until all are connected
+    var part2: usize = 0;
     for (connections.items) |conn| {
         if (uf.unite(conn.a.id, conn.b.id)) {
             if (uf.numComponents() == 1) {
-                return conn.a.x * conn.b.x;
+                part2 = conn.a.x * conn.b.x;
+                break;
             }
         }
     }
 
-    return error.InvalidOperation;
+    return .{ .part1 = part1, .part2 = part2 };
 }
 
 test "part 1" {
@@ -279,8 +240,7 @@ test "part 1" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    std.debug.print("\nRunning part 1 test...\n", .{});
-    try std.testing.expectEqual(40, try part1(allocator, input, 10));
+    try std.testing.expectEqual(40, (try playground(allocator, input, 10)).part1);
 }
 
 test "part 2" {
@@ -289,6 +249,5 @@ test "part 2" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    std.debug.print("\nRunning part 2 test...\n", .{});
-    try std.testing.expectEqual(25272, try part2(allocator, input));
+    try std.testing.expectEqual(25272, (try playground(allocator, input, 10)).part2);
 }
