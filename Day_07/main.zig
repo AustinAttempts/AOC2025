@@ -1,5 +1,9 @@
 const std = @import("std");
 
+const Solution = struct {
+    part1: usize,
+    part2: usize,
+};
 const Coord = struct { x: usize, y: usize };
 const Node = struct { char: u8, futures: usize };
 const CoordMap = std.ArrayHashMap(Coord, Node, std.array_hash_map.AutoContext(Coord), true);
@@ -12,11 +16,44 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     const input = @embedFile("inputs/day07.txt");
-    std.debug.print("Part 1 Answer: {d}\n", .{try part1(allocator, input)});
-    std.debug.print("Part 2 Answer: {d}\n", .{try part2(allocator, input)});
+    const solution = try laboratories(allocator, input);
+    std.debug.print("Part 1 Answer: {d}\n", .{solution.part1});
+    std.debug.print("Part 2 Answer: {d}\n", .{solution.part2});
 
     const elapsed = timer.read();
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
+}
+
+fn laboratories(allocator: std.mem.Allocator, input: []const u8) !Solution {
+    var map = CoordMap.init(allocator);
+    defer map.deinit();
+
+    const max_size = try mapBuilder(&map, input);
+
+    try tachyonPath(&map, max_size);
+
+    var part1: usize = 0;
+    for (0..max_size.y) |y| {
+        for (0..max_size.x) |x| {
+            const val = map.get(.{ .x = x, .y = y }).?.char;
+            if (val == '^') {
+                const val_above = map.get(.{ .x = x, .y = y - 1 }).?.char;
+                if (val_above == '|') {
+                    part1 += 1;
+                }
+            }
+        }
+    }
+
+    var part2: usize = 0;
+    for (0..max_size.x) |x| {
+        const node = map.get(.{ .x = x, .y = max_size.y - 1 }).?;
+        if (node.char == '|') {
+            part2 += node.futures;
+        }
+    }
+
+    return Solution{ .part1 = part1, .part2 = part2 };
 }
 
 fn mapBuilder(map: *CoordMap, input: []const u8) !Coord {
@@ -37,35 +74,6 @@ fn mapBuilder(map: *CoordMap, input: []const u8) !Coord {
     }
     max_size = .{ .x = current_pos.x, .y = current_pos.y };
     return max_size;
-}
-
-fn printMap(map: CoordMap, max_size: Coord) void {
-    for (0..max_size.y) |y| {
-        for (0..max_size.x) |x| {
-            std.debug.print("{c}", .{(map.get(.{ .x = x, .y = y }).?).char});
-        }
-        std.debug.print("\n", .{});
-    }
-}
-
-fn printFutureCounts(map: CoordMap, max_size: Coord) void {
-    for (0..max_size.y) |y| {
-        for (0..max_size.x) |x| {
-            const node = map.get(.{ .x = x, .y = y }).?;
-            switch (node.char) {
-                '|' => {
-                    std.debug.print("{X}", .{node.futures});
-                },
-                '.' => {
-                    std.debug.print(" ", .{});
-                },
-                else => {
-                    std.debug.print("{c}", .{node.char});
-                },
-            }
-        }
-        std.debug.print("\n", .{});
-    }
 }
 
 fn updateCell(map: *CoordMap, coord: Coord, current_futures: usize) !void {
@@ -113,63 +121,13 @@ fn tachyonPath(map: *CoordMap, max_size: Coord) !void {
     }
 }
 
-fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
-    var sum: usize = 0;
-    var map = CoordMap.init(allocator);
-    defer map.deinit();
-
-    const max_size = try mapBuilder(&map, input);
-    printMap(map, max_size);
-
-    try tachyonPath(&map, max_size);
-
-    printMap(map, max_size);
-
-    for (0..max_size.y) |y| {
-        for (0..max_size.x) |x| {
-            const val = map.get(.{ .x = x, .y = y }).?.char;
-            if (val == '^') {
-                const val_above = map.get(.{ .x = x, .y = y - 1 }).?.char;
-                if (val_above == '|') {
-                    sum += 1;
-                }
-            }
-        }
-    }
-    return sum;
-}
-
-fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
-    var sum: usize = 0;
-    var map = CoordMap.init(allocator);
-    defer map.deinit();
-
-    const max_size = try mapBuilder(&map, input);
-    try tachyonPath(&map, max_size);
-
-    printFutureCounts(map, max_size);
-
-    std.debug.print("Path Totals:\n", .{});
-
-    for (0..max_size.x) |x| {
-        const node = map.get(.{ .x = x, .y = max_size.y - 1 }).?;
-        if (node.char == '|') {
-            sum += node.futures;
-            std.debug.print("\t{d}\n", .{node.futures});
-        }
-    }
-
-    return sum;
-}
-
 test "part 1" {
     const input = @embedFile("inputs/test_case.txt");
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    std.debug.print("\nRunning part 1 test...\n", .{});
-    try std.testing.expectEqual(21, try part1(allocator, input));
+    try std.testing.expectEqual(21, (try laboratories(allocator, input)).part1);
 }
 
 test "part 2" {
@@ -178,6 +136,5 @@ test "part 2" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    std.debug.print("\nRunning part 2 test...\n", .{});
-    try std.testing.expectEqual(40, try part2(allocator, input));
+    try std.testing.expectEqual(40, (try laboratories(allocator, input)).part2);
 }
