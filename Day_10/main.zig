@@ -301,10 +301,8 @@ fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
     var total_presses: usize = 0;
     for (machines.items) |machine| {
         if (try machine.findMinPresses(allocator)) |presses| {
-            std.debug.print("Min presses for this machine: {d}\n", .{presses});
             total_presses += presses;
         } else {
-            std.debug.print("No solution found for this machine!\n", .{});
             return error.NoSolution;
         }
     }
@@ -583,7 +581,6 @@ fn toReducedRowEchelonForm(matrix: *Matrix) void {
     for (0..num_switches) |col| {
         if (pivot_row >= matrix.num_rows) break;
 
-        // 1. Find pivot (unchanged)
         var best_row = pivot_row;
         for (pivot_row + 1..matrix.num_rows) |row| {
             if (@abs(matrix.rows[row][col]) > @abs(matrix.rows[best_row][col])) best_row = row;
@@ -594,9 +591,14 @@ fn toReducedRowEchelonForm(matrix: *Matrix) void {
         matrix.rows[pivot_row] = matrix.rows[best_row];
         matrix.rows[best_row] = temp;
 
-        const pivot_val = matrix.rows[pivot_row][col];
+        // --- NEW: Normalize IMMEDIATELY ---
+        const row_pivot = matrix.rows[pivot_row][col];
+        for (0..matrix.num_cols) |c| {
+            matrix.rows[pivot_row][c] = @divTrunc(matrix.rows[pivot_row][c], row_pivot);
+        }
 
-        // 2. Eliminate all other rows (up and down)
+        const pivot_val = matrix.rows[pivot_row][col]; // This is now always 1 or -1 (but usually 1)
+
         for (0..matrix.num_rows) |row| {
             if (row == pivot_row) continue;
             const row_val = matrix.rows[row][col];
@@ -607,18 +609,6 @@ fn toReducedRowEchelonForm(matrix: *Matrix) void {
                 simplifyRow(matrix.rows[row]);
             }
         }
-
-        // 3. NEW: Normalize the pivot row so the pivot coefficient is 1
-        // This is required for the 'initial_presses' and 'costs' logic to work.
-        const row_pivot = matrix.rows[pivot_row][col];
-        if (row_pivot != 0) {
-            for (0..matrix.num_cols) |c| {
-                // Ensure every value in the row is divisible by the pivot.
-                // If not, this specific path has no integer solution.
-                matrix.rows[pivot_row][c] = @divTrunc(matrix.rows[pivot_row][c], row_pivot);
-            }
-        }
-
         pivot_row += 1;
     }
 }
@@ -628,10 +618,14 @@ fn calculateDynamicLimits(allocator: std.mem.Allocator, matrix: Matrix, free_var
     const num_switches = matrix.num_cols - 1;
 
     for (free_vars, 0..) |fv_idx, i| {
-        var min_limit: i64 = 1000; // Sensible upper cap for this problem
+        var min_limit: i64 = 1000;
         for (matrix.rows) |row| {
-            if (row[fv_idx] > 0) {
-                const limit = @divTrunc(row[num_switches], row[fv_idx]);
+            const c = row[fv_idx];
+            const r = row[num_switches];
+            // If pivot_coeff * x_pivot + c * x_free = r
+            // Since x_pivot >= 0 and pivot_coeff is 1, then c * x_free <= r
+            if (c > 0) {
+                const limit = @divTrunc(r, c);
                 if (limit >= 0) min_limit = @min(min_limit, limit);
             }
         }
@@ -650,40 +644,55 @@ fn solveRecursive(
     depth: usize,
 ) ?i64 {
     const is_last = (depth == costs.len - 1);
-
     if (is_last) {
         var lower: i64 = 0;
         var upper: i64 = limits[depth];
 
         for (coeffs[depth], 0..) |c, row_idx| {
             const r = rhs[row_idx];
-            if (c > 0) {
-                upper = @min(upper, @divTrunc(r, c));
-            } else if (c < 0) {
-                lower = @max(lower, @divTrunc(r + c + 1, c));
-            } else if (r < 0) {
-                return null; // Infeasible
+            const is_pivot_row = row_idx < fixed_count;
+
+            if (is_pivot_row) {
+                // This row represents: x_pivot + c*x_last = r
+                // Since x_pivot >= 0, we must have c*x_last <= r
+                if (c > 0) {
+                    upper = @min(upper, @divTrunc(r, c));
+                } else if (c < 0) {
+                    // x_last >= r/c (rounded up)
+                    lower = @max(lower, @divTrunc(r + c + 1, c));
+                } else {
+                    // c == 0: x_pivot = r. We only need r >= 0.
+                    if (r < 0) return null;
+                }
+            } else {
+                // This is a constraint row (no pivot): c*x_last = r
+                if (c != 0) {
+                    if (@mod(r, c) != 0) return null; // Must be integer
+                    const val = @divTrunc(r, c);
+                    if (val < 0) return null; // Switches can't be negative
+                    lower = @max(lower, val);
+                    upper = @min(upper, val);
+                } else {
+                    // c == 0: 0 = r.
+                    if (r != 0) return null;
+                }
             }
         }
 
         if (lower <= upper) {
-            // Pick value that minimizes cost
             const best_x = if (costs[depth] >= 0) lower else upper;
             return current_presses + (best_x * costs[depth]);
         }
         return null;
     } else {
+        // ... (rest of your existing recursive logic is correct)
         var min_total: ?i64 = null;
         var x: i64 = 0;
         while (x <= limits[depth]) : (x += 1) {
-            // Incremental RHS update
             for (0..rhs.len) |row| rhs[row] -= x * coeffs[depth][row];
-
             if (solveRecursive(costs, limits, coeffs, rhs, fixed_count, current_presses + (x * costs[depth]), depth + 1)) |res| {
                 if (min_total == null or res < min_total.?) min_total = res;
             }
-
-            // Backtrack RHS
             for (0..rhs.len) |row| rhs[row] += x * coeffs[depth][row];
         }
         return min_total;
