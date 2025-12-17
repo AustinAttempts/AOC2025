@@ -206,6 +206,21 @@ const Matrix = struct {
     }
 };
 
+// Identify free variables and constraints on them
+const FreeVarInfo = struct {
+    free_vars: []usize,
+    constraints: [][]i64, // Each constraint is coefficients for free vars + constant
+    allocator: std.mem.Allocator,
+
+    fn deinit(self: *@This()) void {
+        self.allocator.free(self.free_vars);
+        for (self.constraints) |constraint| {
+            self.allocator.free(constraint);
+        }
+        self.allocator.free(self.constraints);
+    }
+};
+
 pub fn main() !void {
     var timer = try std.time.Timer.start();
 
@@ -360,8 +375,8 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
         machine.printMachine();
     }
 
+    var result: usize = 0;
     for (machines.items) |machine| {
-        // TODO: Built matrix of buttons associated to joltages
         // ex. Machine = [.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}
         // Matrix = 0, 0, 0, 0, 1, 1, 3
         //          0, 1, 0, 0, 0, 1, 5
@@ -373,19 +388,25 @@ fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
         std.debug.print("Original matrix:\n", .{});
         matrix.print();
 
-        //TODO: Transform matix to row echelon form
         // ex. Using above Matrix:
         // Matrix = 1, 0, 0, 1, 0, -1, 2
         //          0, 1, 0, 0, 0, 1, 5
         //          0, 0, 1, 1, 0, -1, 1
         //          0, 0, 0, 0, 1, 1, 3
         toRowEchelonForm(&matrix);
-
         std.debug.print("Row echelon form:\n", .{});
         matrix.print();
+
+        // Identify free variables
+        var free_var_info = try identifyFreeVariables(allocator, matrix);
+        defer free_var_info.deinit();
+
+        //NOTE: switches are binary (1/0) so all results must be positive integers
+        // ex. using above Matrix gives min presses = 10
+        result += try findMinPresses(allocator, matrix, free_var_info);
     }
 
-    return 0;
+    return result;
 }
 
 // Build the augmented matrix from a machine
@@ -434,18 +455,310 @@ fn toRowEchelonForm(matrix: *Matrix) void {
 
         if (!found_pivot) continue;
 
-        // Eliminate all rows below the pivot
+        // Eliminate all rows below the pivot using regular subtraction
+        const pivot_val = matrix.rows[pivot_row][col];
         for (pivot_row + 1..matrix.num_rows) |row| {
-            if (matrix.rows[row][col] != 0) {
-                // XOR the rows (since we're working in GF(2) - binary field)
+            const row_val = matrix.rows[row][col];
+            if (row_val != 0) {
+                // Subtract (row_val/pivot_val) * pivot_row from current row
+                // To eliminate the coefficient in column 'col'
                 for (0..matrix.num_cols) |c| {
-                    matrix.rows[row][c] ^= matrix.rows[pivot_row][c];
+                    matrix.rows[row][c] = matrix.rows[row][c] * pivot_val - row_val * matrix.rows[pivot_row][c];
                 }
             }
         }
 
         pivot_row += 1;
     }
+}
+
+fn identifyFreeVariables(allocator: std.mem.Allocator, matrix: Matrix) !FreeVarInfo {
+    var free_vars: std.ArrayList(usize) = .empty;
+    errdefer free_vars.deinit(allocator);
+
+    var constraints: std.ArrayList([]i64) = .empty;
+    errdefer {
+        for (constraints.items) |c| allocator.free(c);
+        constraints.deinit(allocator);
+    }
+
+    const num_switches = matrix.num_cols - 1;
+
+    // Track which columns have pivots
+    var has_pivot = try allocator.alloc(bool, num_switches);
+    defer allocator.free(has_pivot);
+    @memset(has_pivot, false);
+
+    // Track which columns appear with negative coefficients
+    var has_negative = try allocator.alloc(bool, num_switches);
+    defer allocator.free(has_negative);
+    @memset(has_negative, false);
+
+    // Find pivot columns and identify rows that only contain free variables
+    for (matrix.rows) |row| {
+        var found_pivot = false;
+        for (0..num_switches) |col| {
+            if (row[col] != 0) {
+                if (!found_pivot) {
+                    has_pivot[col] = true;
+                    found_pivot = true;
+                }
+                if (row[col] < 0) {
+                    has_negative[col] = true;
+                }
+            }
+        }
+    }
+
+    // Identify free variables
+    for (0..num_switches) |col| {
+        if (!has_pivot[col]) {
+            try free_vars.append(allocator, col);
+        }
+    }
+
+    // If no free variables but there are negative coefficients, treat rightmost as free
+    if (free_vars.items.len == 0) {
+        var needs_exploration = false;
+        for (matrix.rows) |row| {
+            if (row[num_switches] < 0) {
+                needs_exploration = true;
+                break;
+            }
+            for (0..num_switches) |col| {
+                if (row[col] < 0) {
+                    needs_exploration = true;
+                    break;
+                }
+            }
+            if (needs_exploration) break;
+        }
+
+        if (needs_exploration) {
+            var col_idx = num_switches;
+            while (col_idx > 0 and free_vars.items.len < 3) {
+                col_idx -= 1;
+                if (has_negative[col_idx]) {
+                    try free_vars.append(allocator, col_idx);
+                }
+            }
+        }
+    }
+
+    // Now check for constraints on free variables
+    // These are rows where all non-zero coefficients are on free variables
+    if (free_vars.items.len > 0) {
+        for (matrix.rows) |row| {
+            var only_free_vars = true;
+            for (0..num_switches) |col| {
+                if (row[col] != 0) {
+                    // Check if this column is a free variable
+                    var is_free = false;
+                    for (free_vars.items) |fv| {
+                        if (fv == col) {
+                            is_free = true;
+                            break;
+                        }
+                    }
+                    if (!is_free) {
+                        only_free_vars = false;
+                        break;
+                    }
+                }
+            }
+
+            if (only_free_vars) {
+                // This row is a constraint on free variables only
+                var constraint = try allocator.alloc(i64, free_vars.items.len + 1);
+
+                // Extract coefficients for each free variable
+                for (free_vars.items, 0..) |fv, idx| {
+                    constraint[idx] = row[fv];
+                }
+                // Last element is the constant (target)
+                constraint[free_vars.items.len] = row[num_switches];
+
+                try constraints.append(allocator, constraint);
+            }
+        }
+    }
+
+    return FreeVarInfo{
+        .free_vars = try free_vars.toOwnedSlice(allocator),
+        .constraints = try constraints.toOwnedSlice(allocator),
+        .allocator = allocator,
+    };
+}
+
+// Back-substitute to solve for dependent variables given free variable values
+fn backSubstitute(matrix: Matrix, switch_presses: []i64) bool {
+    const num_switches = matrix.num_cols - 1;
+
+    // Work backwards through rows
+    var row_idx: usize = matrix.num_rows;
+    while (row_idx > 0) {
+        row_idx -= 1;
+        const row = matrix.rows[row_idx];
+
+        // Find the pivot (first non-zero) in this row
+        var pivot_col: ?usize = null;
+        for (0..num_switches) |col| {
+            if (row[col] != 0) {
+                pivot_col = col;
+                break;
+            }
+        }
+
+        if (pivot_col) |col| {
+            // Calculate what this switch press count should be
+            var sum: i64 = row[num_switches]; // start with target value
+
+            // Subtract contributions from switches to the right
+            for (col + 1..num_switches) |c| {
+                sum -= row[c] * switch_presses[c];
+            }
+
+            // The pivot variable must equal sum / pivot_coefficient
+            if (@mod(sum, row[col]) != 0) {
+                return false; // no integer solution
+            }
+            switch_presses[col] = @divTrunc(sum, row[col]);
+
+            // Check if solution is non-negative
+            if (switch_presses[col] < 0) {
+                return false;
+            }
+        }
+    }
+
+    // Verify the solution
+    for (matrix.rows) |row| {
+        var result: i64 = 0;
+        for (0..num_switches) |col| {
+            result += switch_presses[col] * row[col];
+        }
+        if (result != row[num_switches]) {
+            return false; // doesn't satisfy equation
+        }
+    }
+
+    return true;
+}
+
+// Calculate total number of presses from a solution vector
+fn calculateTotalPresses(switch_presses: []i64) usize {
+    var total: usize = 0;
+    for (switch_presses) |presses| {
+        total += @intCast(presses);
+    }
+    return total;
+}
+
+// Find minimum number of presses by trying all combinations of free variables
+fn findMinPresses(allocator: std.mem.Allocator, matrix: Matrix, free_var_info: FreeVarInfo) !usize {
+    const num_switches = matrix.num_cols - 1;
+    const free_vars = free_var_info.free_vars;
+
+    // If no free variables, there's only one solution
+    if (free_vars.len == 0) {
+        const switch_presses = try allocator.alloc(i64, num_switches);
+        defer allocator.free(switch_presses);
+        @memset(switch_presses, 0);
+
+        if (backSubstitute(matrix, switch_presses)) {
+            return calculateTotalPresses(switch_presses);
+        }
+        return error.NoSolution;
+    }
+
+    var min_presses: ?usize = null;
+
+    // Determine search range
+    var max_free_value: i64 = 0;
+    for (matrix.rows) |row| {
+        const target = row[num_switches];
+        const abs_target = if (target < 0) -target else target;
+        if (abs_target > max_free_value) {
+            max_free_value = abs_target;
+        }
+    }
+
+    if (free_vars.len <= 2) {
+        max_free_value = @min(max_free_value, 100);
+    } else {
+        max_free_value = @min(max_free_value, 30);
+    }
+
+    std.debug.print("Searching with {} free variables, {} constraints, max value: {}\n", .{ free_vars.len, free_var_info.constraints.len, max_free_value });
+
+    var combo = try allocator.alloc(i64, free_vars.len);
+    defer allocator.free(combo);
+    @memset(combo, 0);
+
+    var done = false;
+    var iterations: usize = 0;
+    const max_iterations: usize = 50000000;
+    var solutions_found: usize = 0;
+
+    while (!done and iterations < max_iterations) : (iterations += 1) {
+        // Check if this combination satisfies all constraints on free variables
+        var satisfies_constraints = true;
+        for (free_var_info.constraints) |constraint| {
+            var sum: i64 = 0;
+            for (0..free_vars.len) |i| {
+                sum += constraint[i] * combo[i];
+            }
+            const target = constraint[free_vars.len];
+            if (sum != target) {
+                satisfies_constraints = false;
+                break;
+            }
+        }
+
+        if (satisfies_constraints) {
+            var switch_presses = try allocator.alloc(i64, num_switches);
+            defer allocator.free(switch_presses);
+            @memset(switch_presses, 0);
+
+            // Set free variables to current combination
+            for (free_vars, 0..) |free_var, idx| {
+                switch_presses[free_var] = combo[idx];
+            }
+
+            // Try to solve for dependent variables
+            if (backSubstitute(matrix, switch_presses)) {
+                const total = calculateTotalPresses(switch_presses);
+                if (min_presses == null or total < min_presses.?) {
+                    min_presses = total;
+                    std.debug.print("Found better solution with {} presses at iteration {}\n", .{ total, iterations });
+                }
+                solutions_found += 1;
+            }
+        }
+
+        // Increment combination
+        var carry = true;
+        for (0..combo.len) |i| {
+            if (carry) {
+                combo[i] += 1;
+                if (combo[i] <= max_free_value) {
+                    carry = false;
+                } else {
+                    combo[i] = 0;
+                }
+            }
+        }
+        if (carry) {
+            done = true;
+        }
+    }
+
+    std.debug.print("Completed search: {} iterations, {} solutions found\n", .{ iterations, solutions_found });
+
+    if (min_presses) |val| {
+        return val;
+    }
+    return error.NoSolution;
 }
 
 test "part 1" {
