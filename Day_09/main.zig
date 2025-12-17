@@ -6,6 +6,7 @@ const Solution = struct {
 };
 
 const Coord = struct { x: usize, y: usize };
+
 const Rect = struct {
     a: Coord,
     b: Coord,
@@ -18,6 +19,29 @@ const Rect = struct {
         const height = @abs(@as(isize, @intCast(a.y)) - @as(isize, @intCast(b.y))) + 1;
         const area = width * height;
         return .{ .a = a, .b = b, .width = width, .height = height, .area = area };
+    }
+
+    fn corners(self: Rect) [4]Coord {
+        const x1 = @min(self.a.x, self.b.x);
+        const y1 = @min(self.a.y, self.b.y);
+        const x2 = @max(self.a.x, self.b.x);
+        const y2 = @max(self.a.y, self.b.y);
+
+        return [4]Coord{
+            .{ .x = x1, .y = y1 },
+            .{ .x = x2, .y = y1 },
+            .{ .x = x1, .y = y2 },
+            .{ .x = x2, .y = y2 },
+        };
+    }
+
+    fn bounds(self: Rect) struct { x1: usize, y1: usize, x2: usize, y2: usize } {
+        return .{
+            .x1 = @min(self.a.x, self.b.x),
+            .y1 = @min(self.a.y, self.b.y),
+            .x2 = @max(self.a.x, self.b.x),
+            .y2 = @max(self.a.y, self.b.y),
+        };
     }
 };
 
@@ -39,19 +63,20 @@ pub fn main() !void {
 }
 
 fn movieTheatre(allocator: std.mem.Allocator, input: []const u8) !Solution {
+    // Parse coordinates
     var coords: std.ArrayList(Coord) = .empty;
-    defer _ = coords.deinit(allocator);
+    defer coords.deinit(allocator);
+
     var lines = std.mem.splitScalar(u8, input, '\n');
     while (lines.next()) |line| {
         if (line.len == 0) continue;
         var values = std.mem.splitScalar(u8, line, ',');
         const x = try std.fmt.parseInt(usize, values.next().?, 10);
         const y = try std.fmt.parseInt(usize, values.next().?, 10);
-        const coord: Coord = .{ .x = x, .y = y };
-        try coords.append(allocator, coord);
+        try coords.append(allocator, .{ .x = x, .y = y });
     }
 
-    // Find min values for normalization
+    // Find bounds for normalization
     var min_x: usize = std.math.maxInt(usize);
     var min_y: usize = std.math.maxInt(usize);
     for (coords.items) |coord| {
@@ -59,48 +84,36 @@ fn movieTheatre(allocator: std.mem.Allocator, input: []const u8) !Solution {
         min_y = @min(min_y, coord.y);
     }
 
-    // Normalize coordinates
-    var coords_normed: std.ArrayList(Coord) = .empty;
-    defer _ = coords_normed.deinit(allocator);
-    for (coords.items) |coord| {
-        try coords_normed.append(allocator, .{ .x = coord.x - min_x, .y = coord.y - min_y });
+    // Normalize coordinates in-place
+    for (coords.items) |*coord| {
+        coord.x -= min_x;
+        coord.y -= min_y;
     }
 
-    // Find bounds after normalization
-    var max_x: usize = 0;
-    var max_y: usize = 0;
-    for (coords_normed.items) |coord| {
-        max_x = @max(max_x, coord.x);
-        max_y = @max(max_y, coord.y);
-    }
+    const polygon = coords.items;
 
-    // The simple_polygon is the ordered list of normalized coordinates (the boundary)
-    const simple_polygon = coords_normed.items;
+    // Optional: output for visualization
+    try outputPolygonToText(polygon, "polygon_vertices.csv");
 
-    // Output vertices for visualization
-    try outputPolygonToText(allocator, simple_polygon, "polygon_vertices.csv");
+    // Generate all possible rectangles
+    var candidate_rects: std.ArrayList(Rect) = .empty;
+    defer candidate_rects.deinit(allocator);
 
-    var rectangles: std.ArrayList(Rect) = .empty;
-    defer _ = rectangles.deinit(allocator);
-
-    // Calculate all possible rectangles using normalized coordinates
-    var rects: std.ArrayList(Rect) = .empty;
-    defer _ = rects.deinit(allocator);
-
-    for (coords_normed.items, 0..) |edge1, i| {
-        for (coords_normed.items[i + 1 ..]) |edge2| {
-            try rects.append(allocator, Rect.init(edge1, edge2));
+    for (polygon, 0..) |vertex1, i| {
+        for (polygon[i + 1 ..]) |vertex2| {
+            try candidate_rects.append(allocator, Rect.init(vertex1, vertex2));
         }
     }
 
-    // Sort rects in descending order by area
-    std.mem.sort(Rect, rects.items, {}, rectCmp);
-    const part1: usize = rects.items[0].area;
+    // Sort by area descending
+    std.mem.sort(Rect, candidate_rects.items, {}, rectCmp);
 
-    // Check each rectangle to see if it's inside the simple polygon
+    const part1: usize = candidate_rects.items[0].area;
+
+    // Find largest rectangle fully inside the polygon
     var part2: usize = 0;
-    for (rects.items) |rect| {
-        if (rectangleInsideSimplePolygon(rect, simple_polygon)) {
+    for (candidate_rects.items) |rect| {
+        if (isRectangleInsidePolygon(rect, polygon)) {
             part2 = rect.area;
             break;
         }
@@ -125,14 +138,13 @@ fn crossProduct(o: Coord, a: Coord, b: Coord) isize {
     return (ax - ox) * (by - oy) - (ay - oy) * (bx - ox);
 }
 
-fn distance(a: Coord, b: Coord) usize {
+fn distanceSquared(a: Coord, b: Coord) usize {
     const dx = @abs(@as(isize, @intCast(a.x)) - @as(isize, @intCast(b.x)));
     const dy = @abs(@as(isize, @intCast(a.y)) - @as(isize, @intCast(b.y)));
     return @as(usize, @intCast(dx * dx + dy * dy));
 }
 
-fn outputPolygonToText(allocator: std.mem.Allocator, polygon: []const Coord, filename: []const u8) !void {
-    _ = allocator;
+fn outputPolygonToText(polygon: []const Coord, filename: []const u8) !void {
     const file = try std.fs.cwd().createFile(filename, .{});
     defer file.close();
 
@@ -145,63 +157,62 @@ fn outputPolygonToText(allocator: std.mem.Allocator, polygon: []const Coord, fil
     }
 }
 
-// Checks if a point is strictly inside the rectangle (excluding edges)
-fn isInsideInterior(p: Coord, r: Rect) bool {
-    const x1 = @min(r.a.x, r.b.x);
-    const y1 = @min(r.a.y, r.b.y);
-    const x2 = @max(r.a.x, r.b.x);
-    const y2 = @max(r.a.y, r.b.y);
-
+/// Check if point is strictly inside rectangle (excluding boundary)
+fn isStrictlyInsideRect(p: Coord, x1: usize, y1: usize, x2: usize, y2: usize) bool {
     return p.x > x1 and p.x < x2 and p.y > y1 and p.y < y2;
 }
 
-// Uses fast O(N) check for containment in a simple polygon.
-fn rectangleInsideSimplePolygon(rect: Rect, polygon: []const Coord) bool {
-    const x1 = @min(rect.a.x, rect.b.x);
-    const y1 = @min(rect.a.y, rect.b.y);
-    const x2 = @max(rect.a.x, rect.b.x);
-    const y2 = @max(rect.a.y, rect.b.y);
+/// Check if rectangle is completely inside polygon
+///
+/// Algorithm uses three checks to ensure containment:
+/// 1. All four corners must be inside or on the polygon boundary
+/// 2. No polygon vertices can be strictly inside the rectangle interior
+///    (this handles concave notches that could cut through the rectangle)
+/// 3. Every point along all four edges must be inside or on the polygon
+///    (this ensures edges don't cross outside the polygon boundary)
+fn isRectangleInsidePolygon(rect: Rect, polygon: []const Coord) bool {
+    const b = rect.bounds();
 
-    // 1. Check the four corners are inside or on the boundary of the polygon P. (O(N))
-    const corner_tl: Coord = .{ .x = x1, .y = y1 };
-    const corner_tr: Coord = .{ .x = x2, .y = y1 };
-    const corner_bl: Coord = .{ .x = x1, .y = y2 };
-    const corner_br: Coord = .{ .x = x2, .y = y2 };
+    // Step 1: Check all corners are inside or on polygon boundary
+    const corners = rect.corners();
+    for (corners) |corner| {
+        if (!isPointInsidePolygon(corner, polygon)) return false;
+    }
 
-    if (!pointInsideSimplePolygon(corner_tl, polygon)) return false;
-    if (!pointInsideSimplePolygon(corner_tr, polygon)) return false;
-    if (!pointInsideSimplePolygon(corner_bl, polygon)) return false;
-    if (!pointInsideSimplePolygon(corner_br, polygon)) return false;
-
-    // 2. Check that no polygon vertex P is strictly inside the interior of the rectangle R. (O(N))
-    // This correctly handles concave notches cutting across the rectangle's middle.
-    for (polygon) |p| {
-        if (isInsideInterior(p, rect)) {
+    // Step 2: Check no polygon vertex is strictly inside rectangle
+    // This handles concave cases where a notch cuts through the rectangle's middle
+    for (polygon) |vertex| {
+        if (isStrictlyInsideRect(vertex, b.x1, b.y1, b.x2, b.y2)) {
             return false;
         }
     }
 
-    // 3. Check all left and right edges to verify that no edge exists the polygon
-    for (y1..y2 + 1) |y| {
-        if (!pointInsideSimplePolygon(.{ .x = x1, .y = y }, polygon)) return false;
-        if (!pointInsideSimplePolygon(.{ .x = x2, .y = y }, polygon)) return false;
+    // Step 3: Check all points along vertical edges (left and right)
+    for (b.y1..b.y2 + 1) |y| {
+        if (!isPointInsidePolygon(.{ .x = b.x1, .y = y }, polygon)) return false;
+        if (!isPointInsidePolygon(.{ .x = b.x2, .y = y }, polygon)) return false;
     }
 
-    // 4. Check all top and bottom edges to verify that no edge exists the polygon
-    for (x1..x2 + 1) |x| {
-        if (!pointInsideSimplePolygon(.{ .x = x, .y = y1 }, polygon)) return false;
-        if (!pointInsideSimplePolygon(.{ .x = x, .y = y2 }, polygon)) return false;
+    // Step 4: Check all points along horizontal edges (top and bottom)
+    for (b.x1..b.x2 + 1) |x| {
+        if (!isPointInsidePolygon(.{ .x = x, .y = b.y1 }, polygon)) return false;
+        if (!isPointInsidePolygon(.{ .x = x, .y = b.y2 }, polygon)) return false;
     }
 
     return true;
 }
 
-// Uses Winding Number Algorithm for simple or non-simple polygons (including those with holes)
-fn pointInsideSimplePolygon(point: Coord, polygon: []const Coord) bool {
+/// Winding Number Algorithm for point-in-polygon test
+/// Returns true if point is inside or on the boundary of the polygon
+///
+/// The winding number counts how many times the polygon winds around the point.
+/// If the count is non-zero, the point is inside. The algorithm also explicitly
+/// checks if the point lies on any edge of the polygon.
+fn isPointInsidePolygon(point: Coord, polygon: []const Coord) bool {
     const px = @as(isize, @intCast(point.x));
     const py = @as(isize, @intCast(point.y));
 
-    var wn: isize = 0; // Winding number counter
+    var winding_number: isize = 0;
 
     for (0..polygon.len) |i| {
         const p1 = polygon[i];
@@ -212,36 +223,37 @@ fn pointInsideSimplePolygon(point: Coord, polygon: []const Coord) bool {
         const x2 = @as(isize, @intCast(p2.x));
         const y2 = @as(isize, @intCast(p2.y));
 
-        // Edge case 1: Check if point is on the boundary (robust, kept from previous version)
-        const cross_boundary_check = crossProduct(p1, p2, point);
-        if (cross_boundary_check == 0) {
-            const dot_product = (px - x1) * (x2 - x1) + (py - y1) * (y2 - y1);
-            if (dot_product >= 0) {
-                const dp_u = @as(usize, @intCast(dot_product));
-                if (dp_u <= distance(p1, p2)) {
-                    return true; // Point is on an edge
+        // Check if point lies exactly on the edge
+        const cross = crossProduct(p1, p2, point);
+        if (cross == 0) {
+            // Point is collinear with edge; check if it's between p1 and p2
+            const dot = (px - x1) * (x2 - x1) + (py - y1) * (y2 - y1);
+            if (dot >= 0) {
+                const dot_u = @as(usize, @intCast(dot));
+                if (dot_u <= distanceSquared(p1, p2)) {
+                    return true; // Point is on the edge
                 }
             }
         }
 
-        // Winding Number Algorithm: Check for crossings
-        if (y1 <= py) { // P1 is below or on the ray
-            if (y2 > py) { // P2 is above the ray (Upward crossing)
-                if (cross_boundary_check > 0) {
-                    wn += 1; // Increment Winding Number
-                }
+        // Count edge crossings using winding number
+        if (y1 <= py) {
+            // Edge starts at or below the horizontal ray
+            if (y2 > py and cross > 0) {
+                // Edge crosses upward and point is to the left
+                winding_number += 1;
             }
-        } else { // P1 is above the ray (y1 > py)
-            if (y2 <= py) { // P2 is below or on the ray (Downward crossing)
-                if (cross_boundary_check < 0) {
-                    wn -= 1; // Decrement Winding Number
-                }
+        } else {
+            // Edge starts above the horizontal ray
+            if (y2 <= py and cross < 0) {
+                // Edge crosses downward and point is to the right
+                winding_number -= 1;
             }
         }
     }
 
-    // Point is inside if the winding number is non-zero
-    return wn != 0;
+    // Point is inside if winding number is non-zero
+    return winding_number != 0;
 }
 
 test "part 1" {
