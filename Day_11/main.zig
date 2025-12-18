@@ -36,13 +36,10 @@ fn reactor(allocator: std.mem.Allocator, input: []const u8) !Solution {
         var outputs: std.ArrayList([]const u8) = .empty;
         var chunks = std.mem.splitAny(u8, line, ": ");
         const device = chunks.next().?;
-        std.debug.print("Device: {s} --> ", .{device});
         while (chunks.next()) |chunk| {
             if (chunk.len == 0) continue;
-            std.debug.print("{s} ", .{chunk});
             try outputs.append(allocator, chunk);
         }
-        std.debug.print("\n", .{});
         try device_map.put(device, outputs);
     }
 
@@ -90,7 +87,6 @@ fn countPaths(
     device_map: *std.StringHashMap(std.ArrayList([]const u8)),
     current: []const u8,
     target: []const u8,
-    // Cache maps "current_node_name" -> "count_of_paths_to_target"
     memo: *std.StringHashMap(usize),
 ) !usize {
     // 1. Check if we reached target
@@ -106,10 +102,6 @@ fn countPaths(
     // 3. Visit Neighbors
     if (device_map.get(current)) |neighbors| {
         for (neighbors.items) |neighbor| {
-            // NOTE: This assumes a DAG (Directed Acyclic Graph).
-            // If your graph has cycles, simple memoization requires more complex state
-            // (e.g. tracking visited bits in the key), but AOC problems like this
-            // usually imply a flow/DAG structure for Part 2.
             total_paths += try countPaths(allocator, device_map, neighbor, target, memo);
         }
     }
@@ -125,7 +117,6 @@ test "part 1" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    std.debug.print("\nRunning part 1 test...\n", .{});
     try std.testing.expectEqual(5, (try reactor(allocator, input)).part1);
 }
 
@@ -135,6 +126,5 @@ test "part 2" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    std.debug.print("\nRunning part 2 test...\n", .{});
     try std.testing.expectEqual(2, (try reactor(allocator, input)).part2);
 }
