@@ -1,5 +1,10 @@
 const std = @import("std");
 
+const Solution = struct {
+    part1: usize,
+    part2: usize,
+};
+
 const Rational = struct {
     num: i64,
     den: i64,
@@ -273,14 +278,16 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     const input = @embedFile("inputs/day10.txt");
-    std.debug.print("Part 1 Answer: {d}\n", .{try part1(allocator, input)});
-    std.debug.print("Part 2 Answer: {d}\n", .{try part2(allocator, input)});
+    const solution = try factory(allocator, input);
+
+    std.debug.print("Part 1 Answer: {d}\n", .{solution.part1});
+    std.debug.print("Part 2 Answer: {d}\n", .{solution.part2});
 
     const elapsed = timer.read();
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
 }
 
-fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
+fn factory(allocator: std.mem.Allocator, input: []const u8) !Solution {
     var machines: std.ArrayList(Machine) = .empty;
     defer {
         for (machines.items) |*machine| {
@@ -291,85 +298,22 @@ fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
 
     var lines = std.mem.splitScalar(u8, input, '\n');
     while (lines.next()) |line| {
-        var key: std.ArrayList(u8) = .empty;
-        defer _ = key.deinit(allocator);
-        var switches: std.ArrayList([]usize) = .empty;
-        defer _ = switches.deinit(allocator);
-        var joltage: std.ArrayList(usize) = .empty;
-        defer _ = joltage.deinit(allocator);
-
-        var values = std.mem.splitScalar(u8, line, ' ');
-        while (values.next()) |value| {
-            const symbol = value[0];
-            const cleaned_value = std.mem.trim(u8, value, "{}()[]");
-            switch (symbol) {
-                '[' => {
-                    for (cleaned_value) |char| {
-                        if (char == '#') {
-                            try key.append(allocator, 1);
-                        } else {
-                            try key.append(allocator, 0);
-                        }
-                    }
-                },
-                '(' => {
-                    var sw = try allocator.alloc(usize, key.items.len);
-                    @memset(sw, 0);
-                    var indexes = std.mem.splitScalar(u8, cleaned_value, ',');
-                    while (indexes.next()) |index| {
-                        const val = try std.fmt.parseInt(usize, index, 10);
-                        sw[val] = 1;
-                    }
-                    try switches.append(allocator, sw);
-                },
-                '{' => {
-                    var joltages = std.mem.splitScalar(u8, cleaned_value, ',');
-                    while (joltages.next()) |jolt| {
-                        const val = try std.fmt.parseInt(usize, jolt, 10);
-
-                        try joltage.append(allocator, val);
-                    }
-                },
-                else => {
-                    std.debug.panic("unknown value: {c} in line {s}", .{ symbol, cleaned_value });
-                },
-            }
-        }
-        try machines.append(allocator, Machine.init(try key.toOwnedSlice(allocator), try switches.toOwnedSlice(allocator), try joltage.toOwnedSlice(allocator)));
+        if (line.len == 0) continue;
+        try machines.append(allocator, try parseLine(allocator, line));
     }
 
-    // Find minimum presses for all machines and sum them up
-    var total_presses: usize = 0;
+    var part1: usize = 0;
+    var part2: usize = 0;
     for (machines.items) |machine| {
+        part2 += try machine.solvePart2();
         if (try machine.findMinPresses(allocator)) |presses| {
-            total_presses += presses;
+            part1 += presses;
         } else {
             return error.NoSolution;
         }
     }
 
-    return total_presses;
-}
-
-fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
-    var machines: std.ArrayList(Machine) = .empty;
-    defer {
-        for (machines.items) |*m| m.deinit(allocator);
-        machines.deinit(allocator);
-    }
-
-    var lines = std.mem.splitScalar(u8, input, '\n');
-    while (lines.next()) |line| {
-        if (line.len == 0) continue;
-        try machines.append(allocator, try parseLine(allocator, line));
-    }
-
-    var total_p2: usize = 0;
-    for (machines.items) |m| {
-        total_p2 += try m.solvePart2();
-    }
-
-    return total_p2;
+    return .{ .part1 = part1, .part2 = part2 };
 }
 
 fn parseLine(allocator: std.mem.Allocator, line: []const u8) !Machine {
@@ -457,8 +401,7 @@ test "part 1" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    std.debug.print("\nRunning part 1 test...\n", .{});
-    try std.testing.expectEqual(7, try part1(allocator, input));
+    try std.testing.expectEqual(7, (try factory(allocator, input)).part1);
 }
 
 test "part 2" {
@@ -467,6 +410,5 @@ test "part 2" {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    std.debug.print("\nRunning part 2 test...\n", .{});
-    try std.testing.expectEqual(33, try part2(allocator, input));
+    try std.testing.expectEqual(33, (try factory(allocator, input)).part2);
 }
