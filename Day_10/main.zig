@@ -1,60 +1,79 @@
 const std = @import("std");
 
+const Rational = struct {
+    num: i64,
+    den: i64,
+
+    fn init(n: i64, d: i64) Rational {
+        if (d == 0) return .{ .num = 0, .den = 1 };
+        var num = n;
+        var den = d;
+        if (den < 0) {
+            num = -num;
+            den = -den;
+        }
+        const g = gcd(@abs(num), @abs(den));
+        return .{
+            .num = @divTrunc(num, @as(i64, @intCast(g))),
+            .den = @divTrunc(den, @as(i64, @intCast(g))),
+        };
+    }
+
+    fn gcd(a: u64, b: u64) u64 {
+        var x = a;
+        var y = b;
+        while (y != 0) {
+            const t = y;
+            y = x % y;
+            x = t;
+        }
+        return if (x == 0) 1 else x;
+    }
+
+    fn add(self: Rational, other: Rational) Rational {
+        return init(self.num * other.den + other.num * self.den, self.den * other.den);
+    }
+
+    fn sub(self: Rational, other: Rational) Rational {
+        return init(self.num * other.den - other.num * self.den, self.den * other.den);
+    }
+
+    fn mul(self: Rational, other: Rational) Rational {
+        return init(self.num * other.num, self.den * other.den);
+    }
+
+    fn div(self: Rational, other: Rational) Rational {
+        return init(self.num * other.den, self.den * other.num);
+    }
+
+    fn isZero(self: Rational) bool {
+        return self.num == 0;
+    }
+
+    fn toInt(self: Rational) ?i64 {
+        if (self.den == 0 or @rem(self.num, self.den) != 0) return null;
+        return @divTrunc(self.num, self.den);
+    }
+
+    fn fromInt(n: i64) Rational {
+        return .{ .num = n, .den = 1 };
+    }
+};
+
 const Machine = struct {
     key: []u8,
     switches: [][]usize,
     joltage: []usize,
 
     fn init(key: []u8, switches: [][]usize, joltage: []usize) Machine {
-        if (key.len != joltage.len) {
-            std.debug.panic("key and joltage must be the same length", .{});
-        }
-
-        for (switches) |sw| {
-            if (sw.len != key.len) {
-                std.debug.panic("switches must be the same length as key", .{});
-            }
-        }
-
         return .{ .key = key, .switches = switches, .joltage = joltage };
     }
 
     fn deinit(self: *Machine, allocator: std.mem.Allocator) void {
         allocator.free(self.key);
-        for (self.switches) |sw| {
-            allocator.free(sw);
-        }
+        for (self.switches) |sw| allocator.free(sw);
         allocator.free(self.switches);
         allocator.free(self.joltage);
-    }
-
-    fn printMachine(self: Machine) void {
-        std.debug.print("Machine:\n", .{});
-
-        // Print Light Result
-        std.debug.print("\tLights: [", .{});
-        for (0..self.key.len - 2) |i| {
-            std.debug.print("{d}, ", .{self.key[i]});
-        }
-        std.debug.print("{d}]\n", .{self.key[self.key.len - 1]});
-
-        // Print Joltage Result
-        std.debug.print("\tJoltage: [", .{});
-        for (0..self.joltage.len - 2) |i| {
-            std.debug.print("{d}, ", .{self.joltage[i]});
-        }
-        std.debug.print("{d}]\n", .{self.joltage[self.joltage.len - 1]});
-
-        // Print Switches
-        std.debug.print("\tSwitches:\n", .{});
-        for (self.switches) |sws| {
-            std.debug.print("\t\t[", .{});
-            for (0..sws.len - 2) |i| {
-                std.debug.print("{d},", .{sws[i]});
-            }
-            std.debug.print("{d}]\n", .{sws[sws.len - 1]});
-        }
-        std.debug.print("\n", .{});
     }
 
     fn findMinPresses(self: Machine, allocator: std.mem.Allocator) !?usize {
@@ -162,6 +181,87 @@ const Machine = struct {
 
         // No solution found
         return null;
+    }
+
+    // Part 2 Logic: Integer Linear Programming using Rational Gaussian Elimination
+    fn solvePart2(self: Machine) !u64 {
+        const num_buttons = self.switches.len;
+        const num_counters = self.joltage.len;
+
+        // 1. Build Rational Matrix [A | b]
+        var matrix = try std.heap.page_allocator.alloc([65]Rational, num_counters);
+        defer std.heap.page_allocator.free(matrix);
+
+        for (0..num_counters) |row| {
+            for (0..num_buttons) |col| {
+                matrix[row][col] = if (self.switches[col][row] == 1) Rational.fromInt(1) else Rational.fromInt(0);
+            }
+            matrix[row][num_buttons] = Rational.fromInt(@intCast(self.joltage[row]));
+        }
+
+        // 2. Gaussian Elimination
+        var pivot_cols = [_]i32{-1} ** 64;
+        var current_row: usize = 0;
+        for (0..num_buttons) |col| {
+            var pivot_row: ?usize = null;
+            for (current_row..num_counters) |r| {
+                if (!matrix[r][col].isZero()) {
+                    pivot_row = r;
+                    break;
+                }
+            }
+
+            if (pivot_row) |pr| {
+                // Swap rows
+                const tmp = matrix[current_row];
+                matrix[current_row] = matrix[pr];
+                matrix[pr] = tmp;
+
+                const p_val = matrix[current_row][col];
+                for (0..num_buttons + 1) |c| matrix[current_row][c] = matrix[current_row][c].div(p_val);
+
+                for (0..num_counters) |r| {
+                    if (r != current_row and !matrix[r][col].isZero()) {
+                        const factor = matrix[r][col];
+                        for (0..num_buttons + 1) |c| {
+                            matrix[r][c] = matrix[r][c].sub(factor.mul(matrix[current_row][c]));
+                        }
+                    }
+                }
+                pivot_cols[current_row] = @intCast(col);
+                current_row += 1;
+            }
+        }
+
+        // Inconsistency check
+        for (current_row..num_counters) |r| {
+            if (!matrix[r][num_buttons].isZero()) return error.NoSolution;
+        }
+
+        // 3. Identify Free Variables
+        var is_pivot = [_]bool{false} ** 64;
+        for (0..current_row) |r| is_pivot[@intCast(pivot_cols[r])] = true;
+
+        var free_vars = [_]usize{0} ** 64;
+        var num_free: usize = 0;
+        for (0..num_buttons) |col| {
+            if (!is_pivot[col]) {
+                free_vars[num_free] = col;
+                num_free += 1;
+            }
+        }
+
+        // 4. Search
+        var max_t: u64 = 0;
+        for (self.joltage) |t| max_t = @max(max_t, t);
+
+        var min_cost: u64 = std.math.maxInt(u64);
+        var free_vals = [_]u64{0} ** 64;
+
+        searchFreeVariables(matrix, num_buttons, current_row, &pivot_cols, &free_vars, num_free, max_t + 1, &free_vals, 0, 0, &min_cost);
+
+        if (min_cost == std.math.maxInt(u64)) return error.NoSolution;
+        return min_cost;
     }
 };
 
@@ -293,10 +393,6 @@ fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
         try machines.append(allocator, Machine.init(try key.toOwnedSlice(allocator), try switches.toOwnedSlice(allocator), try joltage.toOwnedSlice(allocator)));
     }
 
-    for (machines.items) |machine| {
-        machine.printMachine();
-    }
-
     // Find minimum presses for all machines and sum them up
     var total_presses: usize = 0;
     for (machines.items) |machine| {
@@ -313,128 +409,100 @@ fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
 fn part2(allocator: std.mem.Allocator, input: []const u8) !usize {
     var machines: std.ArrayList(Machine) = .empty;
     defer {
-        for (machines.items) |*machine| {
-            machine.deinit(allocator);
-        }
+        for (machines.items) |*m| m.deinit(allocator);
         machines.deinit(allocator);
     }
 
     var lines = std.mem.splitScalar(u8, input, '\n');
     while (lines.next()) |line| {
-        var key: std.ArrayList(u8) = .empty;
-        defer _ = key.deinit(allocator);
-        var switches: std.ArrayList([]usize) = .empty;
-        defer _ = switches.deinit(allocator);
-        var joltage: std.ArrayList(usize) = .empty;
-        defer _ = joltage.deinit(allocator);
+        if (line.len == 0) continue;
+        try machines.append(allocator, try parseLine(allocator, line));
+    }
 
-        var values = std.mem.splitScalar(u8, line, ' ');
-        while (values.next()) |value| {
-            const symbol = value[0];
-            const cleaned_value = std.mem.trim(u8, value, "{}()[]");
-            switch (symbol) {
-                '[' => {
-                    for (cleaned_value) |char| {
-                        if (char == '#') {
-                            try key.append(allocator, 1);
-                        } else {
-                            try key.append(allocator, 0);
-                        }
-                    }
-                },
-                '(' => {
-                    var sw = try allocator.alloc(usize, key.items.len);
-                    @memset(sw, 0);
-                    var indexes = std.mem.splitScalar(u8, cleaned_value, ',');
-                    while (indexes.next()) |index| {
-                        const val = try std.fmt.parseInt(usize, index, 10);
-                        sw[val] = 1;
-                    }
-                    try switches.append(allocator, sw);
-                },
-                '{' => {
-                    var joltages = std.mem.splitScalar(u8, cleaned_value, ',');
-                    while (joltages.next()) |jolt| {
-                        const val = try std.fmt.parseInt(usize, jolt, 10);
+    var total_p2: usize = 0;
+    for (machines.items) |m| {
+        total_p2 += try m.solvePart2();
+    }
 
-                        try joltage.append(allocator, val);
-                    }
-                },
-                else => {
-                    std.debug.panic("unknown value: {c} in line {s}", .{ symbol, cleaned_value });
-                },
+    return total_p2;
+}
+
+fn parseLine(allocator: std.mem.Allocator, line: []const u8) !Machine {
+    var key: std.ArrayList(u8) = .empty;
+    var switches: std.ArrayList([]usize) = .empty;
+    var joltage: std.ArrayList(usize) = .empty;
+
+    var tokens = std.mem.tokenizeAny(u8, line, " ");
+    while (tokens.next()) |token| {
+        if (token[0] == '[') {
+            for (token) |c| {
+                if (c == '#') try key.append(allocator, 1) else if (c == '.') try key.append(allocator, 0);
             }
+        } else if (token[0] == '(') {
+            var sw = try allocator.alloc(usize, key.items.len);
+            @memset(sw, 0);
+            var nums = std.mem.tokenizeAny(u8, token, "(,) ");
+            while (nums.next()) |n| {
+                const idx = try std.fmt.parseInt(usize, n, 10);
+                sw[idx] = 1;
+            }
+            try switches.append(allocator, sw);
+        } else if (token[0] == '{') {
+            var nums = std.mem.tokenizeAny(u8, token, "{,} ");
+            while (nums.next()) |n| try joltage.append(allocator, try std.fmt.parseInt(usize, n, 10));
         }
-        try machines.append(allocator, Machine.init(try key.toOwnedSlice(allocator), try switches.toOwnedSlice(allocator), try joltage.toOwnedSlice(allocator)));
     }
-
-    for (machines.items) |machine| {
-        machine.printMachine();
-    }
-
-    var result: usize = 0;
-    for (machines.items) |machine| {
-        // ex. Machine = [.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}
-        // Matrix = 0, 0, 0, 0, 1, 1, 3
-        //          0, 1, 0, 0, 0, 1, 5
-        //          0, 0, 1, 1, 1, 0, 4
-        //          1, 1, 0, 1, 0, 0, 7
-        var matrix = try buildMatrix(allocator, machine);
-        defer matrix.deinit(allocator);
-
-        std.debug.print("Original matrix:\n", .{});
-        matrix.print();
-
-        // ex. Using above Matrix:
-        // Matrix = 1, 0, 0, 1, 0, -1, 2
-        //          0, 1, 0, 0, 0, 1, 5
-        //          0, 0, 1, 1, 0, -1, 1
-        //          0, 0, 0, 0, 1, 1, 3
-        toReducedRowEchelonForm(&matrix);
-        std.debug.print("Row echelon form:\n", .{});
-        matrix.print();
-
-        // Identify free variables
-        var free_var_info = try identifyFreeVariables(allocator, matrix);
-        defer free_var_info.deinit();
-
-        //NOTE: switches are binary (1/0) so all results must be positive integers
-        // ex. using above Matrix gives min presses = 10
-        result += try findMinPresses(allocator, matrix, free_var_info);
-    }
-
-    return result;
+    return Machine.init(try key.toOwnedSlice(allocator), try switches.toOwnedSlice(allocator), try joltage.toOwnedSlice(allocator));
 }
 
-fn gcd(a: u64, b: u64) u64 {
-    var x = a;
-    var y = b;
-    while (y != 0) {
-        const temp = y;
-        y = x % y;
-        x = temp;
-    }
-    return x;
-}
+fn searchFreeVariables(
+    matrix: []const [65]Rational,
+    num_buttons: usize,
+    num_pivots: usize,
+    pivot_cols: []const i32,
+    free_vars: []const usize,
+    num_free: usize,
+    bound: u64,
+    free_vals: []u64,
+    depth: usize,
+    current_free_cost: u64,
+    min_cost: *u64,
+) void {
+    if (current_free_cost >= min_cost.*) return;
 
-fn simplifyRow(row: []i64) void {
-    var common: u64 = 0; // Changed to u64 to match @abs output
-    for (row) |val| {
-        if (val == 0) continue;
-        const abs_val = @abs(val);
-        if (common == 0) {
-            common = abs_val;
-        } else {
-            common = gcd(common, abs_val);
+    if (depth == num_free) {
+        var solution = [_]i64{0} ** 64;
+        for (0..num_free) |f| solution[free_vars[f]] = @intCast(free_vals[f]);
+
+        var total_cost = current_free_cost;
+        var row_idx = num_pivots;
+        while (row_idx > 0) {
+            row_idx -= 1;
+            const col: usize = @intCast(pivot_cols[row_idx]);
+            var val = matrix[row_idx][num_buttons];
+            for (col + 1..num_buttons) |c| {
+                val = val.sub(matrix[row_idx][c].mul(Rational.fromInt(solution[c])));
+            }
+
+            if (val.toInt()) |v| {
+                if (v < 0) return;
+                solution[col] = v;
+                total_cost += @intCast(v);
+                if (total_cost >= min_cost.*) return;
+            } else return;
         }
+        min_cost.* = total_cost;
+        return;
     }
 
-    // Only divide if we found a common factor greater than 1
-    if (common > 1) {
-        const divisor: i64 = @intCast(common); // Cast back to i64 for the division
-        for (row) |*val| {
-            val.* = @divTrunc(val.*, divisor);
-        }
+    const budget = if (min_cost.* > current_free_cost) min_cost.* - current_free_cost else 0;
+    const this_bound = @min(bound, budget);
+
+    var v: u64 = 0;
+    while (v < this_bound) : (v += 1) {
+        free_vals[depth] = v;
+        searchFreeVariables(matrix, num_buttons, num_pivots, pivot_cols, free_vars, num_free, bound, free_vals, depth + 1, current_free_cost + v, min_cost);
+        if (min_cost.* <= current_free_cost + v) break;
     }
 }
 
@@ -542,114 +610,61 @@ fn findMinPresses(allocator: std.mem.Allocator, matrix: Matrix, free_info: FreeV
     if (free_vars.len == 0) {
         var total_presses: i64 = 0;
         for (0..num_switches) |row| {
-            const val = matrix.rows[row][num_switches]; // The solution value
-            if (val < 0) return error.NoSolution; // Valid switches must be >= 0
+            const val = matrix.rows[row][num_switches];
+            if (val < 0) return error.NoSolution;
             total_presses += val;
         }
         return @intCast(total_presses);
     }
 
-    // 1. Calculate Costs: 1 - sum of coeffs in pivot rows
-    // This represents the net change in total presses for each free variable
+    // Calculate costs
     var costs = try allocator.alloc(i64, free_vars.len);
     defer allocator.free(costs);
     for (free_vars, 0..) |fv, i| {
         var pivot_impact: i64 = 0;
-        for (0..matrix.num_rows) |row| {
-            // Only count the impact if this row actually has a pivot
-            var has_pivot = false;
-            for (0..num_switches) |c| {
-                if (matrix.rows[row][c] == 1) {
-                    // Check if this is a pivot column (not a free var column)
-                    var is_free = false;
-                    for (free_vars) |fv_idx| if (fv_idx == c) {
-                        is_free = true;
-                        break;
-                    };
-                    if (!is_free) {
-                        has_pivot = true;
-                        break;
-                    }
-                }
-                if (matrix.rows[row][c] != 0) break; // Not a pivot
-            }
-            if (has_pivot) pivot_impact += matrix.rows[row][fv];
+        for (0..fixed_count) |row| {
+            pivot_impact += matrix.rows[row][fv];
         }
         costs[i] = 1 - pivot_impact;
     }
 
-    // 2. Prepare dynamic limits and initial constant presses
+    // Calculate limits
     const limits = try calculateDynamicLimits(allocator, matrix, free_vars);
     defer allocator.free(limits);
 
+    // Initial presses from fixed variables
     var initial_presses: i64 = 0;
-    for (0..fixed_count) |row| initial_presses += matrix.rows[row][num_switches];
+    for (0..fixed_count) |row| {
+        initial_presses += matrix.rows[row][num_switches];
+    }
 
-    // 3. Extract coefficients for free variables to use in recursion
+    // Extract coefficients
     var coeffs = try allocator.alloc([]i64, free_vars.len);
     defer allocator.free(coeffs);
     for (free_vars, 0..) |fv, i| {
         coeffs[i] = try allocator.alloc(i64, matrix.num_rows);
-        for (0..matrix.num_rows) |row| coeffs[i][row] = matrix.rows[row][fv];
+        for (0..matrix.num_rows) |row| {
+            coeffs[i][row] = matrix.rows[row][fv];
+        }
     }
     defer for (coeffs) |c| allocator.free(c);
 
-    // 4. Initial RHS
-    var rhs = try allocator.alloc(i64, matrix.num_rows);
-    defer allocator.free(rhs);
-    for (0..matrix.num_rows) |row| rhs[row] = matrix.rows[row][num_switches];
+    // Initial RHS
+    var rhs = try allocator.alloc([]i64, free_vars.len);
+    defer {
+        for (rhs) |r| allocator.free(r);
+        allocator.free(rhs);
+    }
+
+    for (0..free_vars.len) |i| {
+        rhs[i] = try allocator.alloc(i64, matrix.num_rows);
+        for (0..matrix.num_rows) |row| {
+            rhs[i][row] = matrix.rows[row][num_switches];
+        }
+    }
 
     const result = solveRecursive(costs, limits, coeffs, rhs, fixed_count, initial_presses, 0);
     return if (result) |res| @intCast(res) else error.NoSolution;
-}
-
-fn toReducedRowEchelonForm(matrix: *Matrix) void {
-    var pivot_row: usize = 0;
-    const num_switches = matrix.num_cols - 1;
-
-    for (0..num_switches) |col| {
-        if (pivot_row >= matrix.num_rows) break;
-
-        var best_row = pivot_row;
-        for (pivot_row + 1..matrix.num_rows) |row| {
-            if (@abs(matrix.rows[row][col]) > @abs(matrix.rows[best_row][col])) best_row = row;
-        }
-
-        const pivot_val = matrix.rows[best_row][col];
-        if (pivot_val == 0) continue;
-
-        // Swap best row to current pivot position
-        const temp = matrix.rows[pivot_row];
-        matrix.rows[pivot_row] = matrix.rows[best_row];
-        matrix.rows[best_row] = temp;
-
-        for (0..matrix.num_rows) |row| {
-            if (row == pivot_row) continue;
-
-            const target_val = matrix.rows[row][col];
-            if (target_val != 0) {
-                // Perform cross-multiplication to keep values as integers without truncation
-                for (0..matrix.num_cols) |c| {
-                    matrix.rows[row][c] = (matrix.rows[row][c] * pivot_val) - (matrix.rows[pivot_row][c] * target_val);
-                }
-                // Simplify the row by dividing by the GCD to prevent integer overflow
-                simplifyRow(matrix.rows[row]);
-            }
-        }
-        pivot_row += 1;
-    }
-
-    // Final Pass: Normalize leading coefficients to 1 where possible
-    for (matrix.rows) |row| {
-        for (row) |val| {
-            if (val == 0) continue;
-            if (val != 1) {
-                const divisor = val;
-                for (0..row.len) |i| row[i] = @divTrunc(row[i], divisor);
-            }
-            break;
-        }
-    }
 }
 
 fn calculateDynamicLimits(allocator: std.mem.Allocator, matrix: Matrix, free_vars: []usize) ![]i64 {
@@ -677,57 +692,73 @@ fn solveRecursive(
     costs: []const i64,
     limits: []const i64,
     coeffs: []const []i64,
-    rhs: []i64,
-    fixed_count: usize,
-    current_presses: i64,
+    rhs: [][]i64,
+    fixed: usize,
+    presses: i64,
     depth: usize,
 ) ?i64 {
-    const is_last = (costs.len > 0 and depth == costs.len - 1);
+    const height = rhs[depth].len;
+    const is_last = depth == coeffs.len - 1;
 
     if (is_last) {
         var lower: i64 = 0;
         var upper: i64 = limits[depth];
 
-        // Determine the valid range [lower, upper] for the final free variable
-        for (coeffs[depth], 0..) |c, row_idx| {
-            const r = rhs[row_idx];
-            if (c > 0) {
-                upper = @min(upper, @divTrunc(r, c));
-            } else if (c < 0) {
-                // If c is negative, it flips the inequality (e.g., -x <= -5 becomes x >= 5)
-                lower = @max(lower, @divTrunc(r + c + 1, c));
-            } else if (r < 0) { // If c is 0, r must be non-negative for a valid state
-                return null;
+        // Check inequalities for all rows
+        for (coeffs[depth], rhs[depth]) |coef, r| {
+            if (r >= 0) {
+                if (coef > 0) {
+                    upper = @min(upper, @divFloor(r, coef));
+                }
+            } else if (coef < 0) {
+                const floor = @divFloor(r + coef + 1, coef);
+                lower = @max(lower, floor);
+            } else {
+                upper = -1;
             }
         }
 
-        if (lower <= upper) {
-            // Check both boundaries and all values in between to find the absolute minimum
-            var min_at_depth: ?i64 = null;
-            var x = lower;
-            while (x <= upper) : (x += 1) {
-                const total = current_presses + (x * costs[depth]);
-                if (min_at_depth == null or total < min_at_depth.?) {
-                    min_at_depth = total;
+        // Check equalities (rows beyond the fixed pivot rows)
+        for (fixed..height) |row| {
+            const c = coeffs[depth][row];
+            const r = rhs[depth][row];
+
+            if (c != 0) {
+                if (@rem(r, c) == 0) {
+                    const val = @divFloor(r, c);
+                    upper = @min(upper, val);
+                    lower = @max(lower, val);
+                } else {
+                    upper = -1;
                 }
             }
-            return min_at_depth;
         }
-        return null;
-    } else {
-        var min_total: ?i64 = null;
-        var x: i64 = 0;
-        // Search through the possible range of the current free variable
-        while (x <= limits[depth]) : (x += 1) {
-            for (0..rhs.len) |row| rhs[row] -= x * coeffs[depth][row];
 
-            if (solveRecursive(costs, limits, coeffs, rhs, fixed_count, current_presses + (x * costs[depth]), depth + 1)) |res| {
-                if (min_total == null or res < min_total.?) min_total = res;
+        if (lower > upper) return null;
+
+        // Choose the value that minimizes total presses
+        const x = if (costs[depth] >= 0) lower else upper;
+        return presses + costs[depth] * x;
+    } else {
+        var min_result: ?i64 = null;
+        var x: i64 = 0;
+
+        while (x <= limits[depth]) : (x += 1) {
+            const next_presses = presses + x * costs[depth];
+
+            // Update RHS for next level
+            for (0..height) |row| {
+                rhs[depth + 1][row] = rhs[depth][row] - x * coeffs[depth][row];
             }
 
-            for (0..rhs.len) |row| rhs[row] += x * coeffs[depth][row];
+            if (solveRecursive(costs, limits, coeffs, rhs, fixed, next_presses, depth + 1)) |result| {
+                if (min_result == null or result < min_result.?) {
+                    min_result = result;
+                }
+            }
         }
-        return min_total;
+
+        return min_result;
     }
 }
 
