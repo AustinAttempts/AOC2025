@@ -539,14 +539,43 @@ fn findMinPresses(allocator: std.mem.Allocator, matrix: Matrix, free_info: FreeV
     const num_switches = matrix.num_cols - 1;
     const fixed_count = num_switches - free_vars.len;
 
+    if (free_vars.len == 0) {
+        var total_presses: i64 = 0;
+        for (0..num_switches) |row| {
+            const val = matrix.rows[row][num_switches]; // The solution value
+            if (val < 0) return error.NoSolution; // Valid switches must be >= 0
+            total_presses += val;
+        }
+        return @intCast(total_presses);
+    }
+
     // 1. Calculate Costs: 1 - sum of coeffs in pivot rows
     // This represents the net change in total presses for each free variable
     var costs = try allocator.alloc(i64, free_vars.len);
     defer allocator.free(costs);
     for (free_vars, 0..) |fv, i| {
-        var pivot_contribution: i64 = 0;
-        for (0..fixed_count) |row| pivot_contribution += matrix.rows[row][fv];
-        costs[i] = 1 - pivot_contribution;
+        var pivot_impact: i64 = 0;
+        for (0..matrix.num_rows) |row| {
+            // Only count the impact if this row actually has a pivot
+            var has_pivot = false;
+            for (0..num_switches) |c| {
+                if (matrix.rows[row][c] == 1) {
+                    // Check if this is a pivot column (not a free var column)
+                    var is_free = false;
+                    for (free_vars) |fv_idx| if (fv_idx == c) {
+                        is_free = true;
+                        break;
+                    };
+                    if (!is_free) {
+                        has_pivot = true;
+                        break;
+                    }
+                }
+                if (matrix.rows[row][c] != 0) break; // Not a pivot
+            }
+            if (has_pivot) pivot_impact += matrix.rows[row][fv];
+        }
+        costs[i] = 1 - pivot_impact;
     }
 
     // 2. Prepare dynamic limits and initial constant presses
@@ -585,31 +614,41 @@ fn toReducedRowEchelonForm(matrix: *Matrix) void {
         for (pivot_row + 1..matrix.num_rows) |row| {
             if (@abs(matrix.rows[row][col]) > @abs(matrix.rows[best_row][col])) best_row = row;
         }
-        if (matrix.rows[best_row][col] == 0) continue;
 
+        const pivot_val = matrix.rows[best_row][col];
+        if (pivot_val == 0) continue;
+
+        // Swap best row to current pivot position
         const temp = matrix.rows[pivot_row];
         matrix.rows[pivot_row] = matrix.rows[best_row];
         matrix.rows[best_row] = temp;
 
-        // --- NEW: Normalize IMMEDIATELY ---
-        const row_pivot = matrix.rows[pivot_row][col];
-        for (0..matrix.num_cols) |c| {
-            matrix.rows[pivot_row][c] = @divTrunc(matrix.rows[pivot_row][c], row_pivot);
-        }
-
-        const pivot_val = matrix.rows[pivot_row][col]; // This is now always 1 or -1 (but usually 1)
-
         for (0..matrix.num_rows) |row| {
             if (row == pivot_row) continue;
-            const row_val = matrix.rows[row][col];
-            if (row_val != 0) {
+
+            const target_val = matrix.rows[row][col];
+            if (target_val != 0) {
+                // Perform cross-multiplication to keep values as integers without truncation
                 for (0..matrix.num_cols) |c| {
-                    matrix.rows[row][c] = matrix.rows[row][c] * pivot_val - row_val * matrix.rows[pivot_row][c];
+                    matrix.rows[row][c] = (matrix.rows[row][c] * pivot_val) - (matrix.rows[pivot_row][c] * target_val);
                 }
+                // Simplify the row by dividing by the GCD to prevent integer overflow
                 simplifyRow(matrix.rows[row]);
             }
         }
         pivot_row += 1;
+    }
+
+    // Final Pass: Normalize leading coefficients to 1 where possible
+    for (matrix.rows) |row| {
+        for (row) |val| {
+            if (val == 0) continue;
+            if (val != 1) {
+                const divisor = val;
+                for (0..row.len) |i| row[i] = @divTrunc(row[i], divisor);
+            }
+            break;
+        }
     }
 }
 
@@ -643,56 +682,49 @@ fn solveRecursive(
     current_presses: i64,
     depth: usize,
 ) ?i64 {
-    const is_last = (depth == costs.len - 1);
+    const is_last = (costs.len > 0 and depth == costs.len - 1);
+
     if (is_last) {
         var lower: i64 = 0;
         var upper: i64 = limits[depth];
 
+        // Determine the valid range [lower, upper] for the final free variable
         for (coeffs[depth], 0..) |c, row_idx| {
             const r = rhs[row_idx];
-            const is_pivot_row = row_idx < fixed_count;
-
-            if (is_pivot_row) {
-                // This row represents: x_pivot + c*x_last = r
-                // Since x_pivot >= 0, we must have c*x_last <= r
-                if (c > 0) {
-                    upper = @min(upper, @divTrunc(r, c));
-                } else if (c < 0) {
-                    // x_last >= r/c (rounded up)
-                    lower = @max(lower, @divTrunc(r + c + 1, c));
-                } else {
-                    // c == 0: x_pivot = r. We only need r >= 0.
-                    if (r < 0) return null;
-                }
-            } else {
-                // This is a constraint row (no pivot): c*x_last = r
-                if (c != 0) {
-                    if (@mod(r, c) != 0) return null; // Must be integer
-                    const val = @divTrunc(r, c);
-                    if (val < 0) return null; // Switches can't be negative
-                    lower = @max(lower, val);
-                    upper = @min(upper, val);
-                } else {
-                    // c == 0: 0 = r.
-                    if (r != 0) return null;
-                }
+            if (c > 0) {
+                upper = @min(upper, @divTrunc(r, c));
+            } else if (c < 0) {
+                // If c is negative, it flips the inequality (e.g., -x <= -5 becomes x >= 5)
+                lower = @max(lower, @divTrunc(r + c + 1, c));
+            } else if (r < 0) { // If c is 0, r must be non-negative for a valid state
+                return null;
             }
         }
 
         if (lower <= upper) {
-            const best_x = if (costs[depth] >= 0) lower else upper;
-            return current_presses + (best_x * costs[depth]);
+            // Check both boundaries and all values in between to find the absolute minimum
+            var min_at_depth: ?i64 = null;
+            var x = lower;
+            while (x <= upper) : (x += 1) {
+                const total = current_presses + (x * costs[depth]);
+                if (min_at_depth == null or total < min_at_depth.?) {
+                    min_at_depth = total;
+                }
+            }
+            return min_at_depth;
         }
         return null;
     } else {
-        // ... (rest of your existing recursive logic is correct)
         var min_total: ?i64 = null;
         var x: i64 = 0;
+        // Search through the possible range of the current free variable
         while (x <= limits[depth]) : (x += 1) {
             for (0..rhs.len) |row| rhs[row] -= x * coeffs[depth][row];
+
             if (solveRecursive(costs, limits, coeffs, rhs, fixed_count, current_presses + (x * costs[depth]), depth + 1)) |res| {
                 if (min_total == null or res < min_total.?) min_total = res;
             }
+
             for (0..rhs.len) |row| rhs[row] += x * coeffs[depth][row];
         }
         return min_total;
