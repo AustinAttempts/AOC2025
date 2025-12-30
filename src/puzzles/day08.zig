@@ -1,9 +1,7 @@
 const std = @import("std");
+const aoc = @import("../root.zig");
 
-const Solution = struct {
-    part1: usize,
-    part2: usize,
-};
+const Solution = aoc.Solution;
 
 const TOP_CIRCUITS_COUNT: usize = 3;
 
@@ -118,15 +116,15 @@ const UnionFind = struct {
     }
 };
 
-pub fn main() !void {
+pub fn solve() !void {
     var timer = try std.time.Timer.start();
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const input = @embedFile("inputs/day08.txt");
-    const solution = try solve(allocator, input, 1000);
+    const input = @embedFile("../inputs/day08.txt");
+    const solution = try playGround(allocator, input, 1000);
     std.debug.print("Part 1 Answer: {d}\n", .{solution.part1});
     std.debug.print("Part 2 Answer: {d}\n", .{solution.part2});
 
@@ -134,9 +132,9 @@ pub fn main() !void {
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
 }
 
-/// Solve the circuit connection problem using Kruskal's algorithm
+/// playGround the circuit connection problem using Kruskal's algorithm
 /// connections_to_add: Number of shortest connections to add for part 1
-fn solve(allocator: std.mem.Allocator, input: []const u8, connections_to_add: usize) !Solution {
+fn playGround(allocator: std.mem.Allocator, input: []const u8, connections_to_add: usize) !Solution {
     if (input.len == 0) return .{ .part1 = 0, .part2 = 0 };
 
     var coords: std.ArrayList(Coord) = .empty;
@@ -229,19 +227,19 @@ fn solve(allocator: std.mem.Allocator, input: []const u8, connections_to_add: us
 }
 
 test "part 1" {
-    const input = @embedFile("inputs/test_case.txt");
+    const input = @embedFile("../inputs/tests/day08_test_case.txt");
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    try std.testing.expectEqual(40, (try solve(allocator, input, 10)).part1);
+    try std.testing.expectEqual(40, (try playGround(allocator, input, 10)).part1);
 }
 
 test "part 2" {
-    const input = @embedFile("inputs/test_case.txt");
+    const input = @embedFile("../inputs/tests/day08_test_case.txt");
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    try std.testing.expectEqual(25272, (try solve(allocator, input, 10)).part2);
+    try std.testing.expectEqual(25272, (try playGround(allocator, input, 10)).part2);
 }
