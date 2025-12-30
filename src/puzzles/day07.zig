@@ -1,14 +1,12 @@
 const std = @import("std");
+const aoc = @import("../root.zig");
 
 const EMPTY = '.';
 const PATH = '|';
 const SPLIT = '^';
 const START = 'S';
 
-const Solution = struct {
-    part1: usize,
-    part2: usize,
-};
+const Solution = aoc.Solution;
 
 /// Represents a position in the 2D grid
 const Coord = struct { x: usize, y: usize };
@@ -21,14 +19,14 @@ const Node = struct {
 
 const CoordMap = std.ArrayHashMap(Coord, Node, std.array_hash_map.AutoContext(Coord), true);
 
-pub fn main() !void {
+pub fn solve() !void {
     var timer = try std.time.Timer.start();
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const input = @embedFile("inputs/day07.txt");
+    const input = @embedFile("../inputs/day07.txt");
     const solution = try laboratories(allocator, input);
     std.debug.print("Part 1 Answer: {d}\n", .{solution.part1});
     std.debug.print("Part 2 Answer: {d}\n", .{solution.part2});
@@ -175,7 +173,7 @@ fn countBottomRowPaths(map: *const CoordMap, dimensions: Coord) usize {
 }
 
 test "part 1" {
-    const input = @embedFile("inputs/test_case.txt");
+    const input = @embedFile("../inputs/tests/day07_test_case.txt");
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -184,7 +182,7 @@ test "part 1" {
 }
 
 test "part 2" {
-    const input = @embedFile("inputs/test_case.txt");
+    const input = @embedFile("../inputs/tests/day07_test_case.txt");
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
