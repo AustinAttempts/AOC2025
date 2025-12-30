@@ -1,9 +1,7 @@
 const std = @import("std");
+const aoc = @import("../root.zig");
 
-const Solution = struct {
-    part1: usize,
-    part2: usize,
-};
+const Solution = aoc.Solution;
 
 const Coord = struct { x: usize, y: usize };
 
@@ -45,14 +43,14 @@ const Rect = struct {
     }
 };
 
-pub fn main() !void {
+pub fn solve() !void {
     var timer = try std.time.Timer.start();
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const input = @embedFile("inputs/day09.txt");
+    const input = @embedFile("../inputs/day09.txt");
     const solution = try movieTheatre(allocator, input);
 
     std.debug.print("Part 1 Answer: {d}\n", .{solution.part1});
@@ -93,7 +91,7 @@ fn movieTheatre(allocator: std.mem.Allocator, input: []const u8) !Solution {
     const polygon = coords.items;
 
     // Optional: output for visualization
-    try outputPolygonToText(polygon, "polygon_vertices.csv");
+    // try outputPolygonToText(polygon, "polygon_vertices.csv");
 
     // Generate all possible rectangles
     var candidate_rects: std.ArrayList(Rect) = .empty;
@@ -257,7 +255,7 @@ fn isPointInsidePolygon(point: Coord, polygon: []const Coord) bool {
 }
 
 test "part 1" {
-    const input = @embedFile("inputs/test_case.txt");
+    const input = @embedFile("../inputs/tests/day09_test_case.txt");
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -266,7 +264,7 @@ test "part 1" {
 }
 
 test "part 2" {
-    const input = @embedFile("inputs/test_case.txt");
+    const input = @embedFile("../inputs/tests/day09_test_case.txt");
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();

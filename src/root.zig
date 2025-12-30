@@ -15,6 +15,7 @@ pub const day05 = @import("puzzles/day05.zig");
 pub const day06 = @import("puzzles/day06.zig");
 pub const day07 = @import("puzzles/day07.zig");
 pub const day08 = @import("puzzles/day08.zig");
+pub const day09 = @import("puzzles/day09.zig");
 
 test {
     std.testing.refAllDecls(@This());
@@ -26,4 +27,5 @@ test {
     _ = @import("puzzles/day06.zig");
     _ = @import("puzzles/day07.zig");
     _ = @import("puzzles/day08.zig");
+    _ = @import("puzzles/day09.zig");
 }
