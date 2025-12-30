@@ -1,23 +1,21 @@
 const std = @import("std");
+const aoc = @import("../root.zig");
 
-const Solution = struct {
-    part1: usize,
-    part2: usize,
-};
+const Solution = aoc.Solution;
 
 const Range = struct {
     start: usize,
     end: usize,
 };
 
-pub fn main() !void {
+pub fn solve() !void {
     var timer = try std.time.Timer.start();
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const input = @embedFile("inputs/day05.txt");
+    const input = @embedFile("../inputs/day05.txt");
     const solution = try cafeteria(allocator, input);
     std.debug.print("Part 1 Answer: {d}\n", .{solution.part1});
     std.debug.print("Part 2 Answer: {d}\n", .{solution.part2});
@@ -107,7 +105,7 @@ fn countTotalCoverage(allocator: std.mem.Allocator, ranges: []const Range) !usiz
 }
 
 test "part 1" {
-    const input = @embedFile("inputs/test_case.txt");
+    const input = @embedFile("../inputs/tests/day05_test_case.txt");
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -116,7 +114,7 @@ test "part 1" {
 }
 
 test "part 2" {
-    const input = @embedFile("inputs/test_case.txt");
+    const input = @embedFile("../inputs/tests/day05_test_case.txt");
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -125,7 +123,7 @@ test "part 2" {
 }
 
 test "part 2 edge case" {
-    const input = @embedFile("inputs/edge_case.txt");
+    const input = @embedFile("../inputs/tests/day05_edge_case.txt");
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
