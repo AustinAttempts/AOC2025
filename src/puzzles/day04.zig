@@ -32,7 +32,7 @@ const DIRECTIONS = [8][2]i32{
 
 pub fn solve() !void {
     const input = @embedFile("../inputs/day03.txt");
-    try aoc.runSolution("Day 03", input, printingDepartment, .{});
+    try aoc.runSolution("Day 04", input, printingDepartment, .{});
 }
 
 fn printingDepartment(allocator: std.mem.Allocator, input: []const u8) !Solution {
