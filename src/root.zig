@@ -29,11 +29,19 @@ pub fn runSolution(
         3 => try solveFn(allocator, input, extra_args[0], extra_args[1], extra_args[2]),
         else => @compileError("Too many extra args (max 3)"),
     };
-    const elapsed = timer.read();
+    const elapsed_ns = timer.read();
+    const ms = @as(f64, @floatFromInt(elapsed_ns)) / std.time.ns_per_ms;
 
-    std.debug.print("{s}: (Run Time: {d:.2}ms)\n", .{ day_name, @as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms });
-    std.debug.print("\t Part 1: {?}\n", .{solution.part1});
-    std.debug.print("\t Part 2: {?}\n", .{solution.part2});
+    // ANSI color codes
+    const cyan = "\x1b[36m";
+    const yellow = "\x1b[33m";
+    const reset = "\x1b[0m";
+    const bold = "\x1b[1m";
+
+    std.debug.print("{s}{s}{s}\n", .{ cyan, day_name, reset });
+    std.debug.print("  {s}Part 1:{s} {?d}\n", .{ bold, reset, solution.part1 });
+    std.debug.print("  {s}Part 2:{s} {?d}\n", .{ bold, reset, solution.part2 });
+    std.debug.print("  {s}⏱  {d:.2}ms{s}\n\n", .{ yellow, ms, reset });
 }
 
 pub const day01 = @import("puzzles/day01.zig");
