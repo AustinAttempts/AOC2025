@@ -44,6 +44,21 @@ pub fn runSolution(
     std.debug.print("  {s}⏱  {d:.2}ms{s}\n\n", .{ yellow, ms, reset });
 }
 
+pub fn printSolution() !void {
+    try day01.solve();
+    try day02.solve();
+    try day03.solve();
+    try day04.solve();
+    try day05.solve();
+    try day06.solve();
+    try day07.solve();
+    try day08.solve();
+    try day09.solve();
+    try day10.solve();
+    try day11.solve();
+    try day12.solve();
+}
+
 pub const day01 = @import("puzzles/day01.zig");
 pub const day02 = @import("puzzles/day02.zig");
 pub const day03 = @import("puzzles/day03.zig");
