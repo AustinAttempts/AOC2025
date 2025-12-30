@@ -29,21 +29,8 @@ const Grid = struct {
 };
 
 pub fn solve() !void {
-    var timer = try std.time.Timer.start();
-
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
     const input = @embedFile("../inputs/day06.txt");
-    const solution = try trashCompactor(allocator, input);
-
-    std.debug.print("Part 1 Answer: {d}\n", .{solution.part1});
-    std.debug.print("Part 2 Answer: {d}\n", .{solution.part2});
-
-    const elapsed = timer.read();
-    const elapsed_ms = @as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms;
-    std.debug.print("Run Time: {d:.2}ms\n", .{elapsed_ms});
+    try aoc.runSolution("Day 06", input, trashCompactor, .{});
 }
 
 fn trashCompactor(allocator: std.mem.Allocator, input: []const u8) !Solution {

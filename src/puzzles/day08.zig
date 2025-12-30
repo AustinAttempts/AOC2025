@@ -117,19 +117,8 @@ const UnionFind = struct {
 };
 
 pub fn solve() !void {
-    var timer = try std.time.Timer.start();
-
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
     const input = @embedFile("../inputs/day08.txt");
-    const solution = try playGround(allocator, input, 1000);
-    std.debug.print("Part 1 Answer: {d}\n", .{solution.part1});
-    std.debug.print("Part 2 Answer: {d}\n", .{solution.part2});
-
-    const elapsed = timer.read();
-    std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
+    try aoc.runSolution("Day 08", input, playGround, .{1000});
 }
 
 /// playGround the circuit connection problem using Kruskal's algorithm

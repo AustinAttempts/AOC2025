@@ -65,17 +65,8 @@ const Region = struct {
 };
 
 pub fn solve() !void {
-    var timer = try std.time.Timer.start();
-
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
     const input = @embedFile("../inputs/day12.txt");
-    std.debug.print("Part 1 Answer: {d}\n", .{(try christmasTreeFarm(allocator, input)).part1});
-
-    const elapsed = timer.read();
-    std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
+    try aoc.runSolution("Day 12", input, christmasTreeFarm, .{});
 }
 
 fn christmasTreeFarm(allocator: std.mem.Allocator, input: []const u8) !Solution {
@@ -156,7 +147,7 @@ fn christmasTreeFarm(allocator: std.mem.Allocator, input: []const u8) !Solution 
         }
     }
 
-    return .{ .part1 = valid_regions, .part2 = 0 };
+    return .{ .part1 = valid_regions, .part2 = null };
 }
 
 test "part 1" {

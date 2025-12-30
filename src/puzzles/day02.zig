@@ -4,18 +4,12 @@ const aoc = @import("../root.zig");
 const Solution = aoc.Solution;
 
 pub fn solve() !void {
-    var timer = try std.time.Timer.start();
     const input = @embedFile("../inputs/day02.txt");
-    const solution = try giftShop(input);
-
-    std.debug.print("Part 1 Answer: {d}\n", .{solution.part1});
-    std.debug.print("Part 2 Answer: {d}\n", .{solution.part2});
-
-    const elapsed = timer.read();
-    std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
+    try aoc.runSolution("Day 01", input, giftShop, .{});
 }
 
-fn giftShop(input: []const u8) !Solution {
+fn giftShop(allocator: std.mem.Allocator, input: []const u8) !Solution {
+    _ = allocator;
     var part1: usize = 0;
     var part2: usize = 0;
     var buf: [32]u8 = undefined;

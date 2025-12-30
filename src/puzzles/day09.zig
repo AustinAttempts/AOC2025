@@ -44,20 +44,8 @@ const Rect = struct {
 };
 
 pub fn solve() !void {
-    var timer = try std.time.Timer.start();
-
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
     const input = @embedFile("../inputs/day09.txt");
-    const solution = try movieTheatre(allocator, input);
-
-    std.debug.print("Part 1 Answer: {d}\n", .{solution.part1});
-    std.debug.print("Part 2 Answer: {d}\n", .{solution.part2});
-
-    const elapsed = timer.read();
-    std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
+    try aoc.runSolution("Day 09", input, movieTheatre, .{});
 }
 
 fn movieTheatre(allocator: std.mem.Allocator, input: []const u8) !Solution {

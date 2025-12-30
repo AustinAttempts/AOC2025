@@ -4,18 +4,12 @@ const aoc = @import("../root.zig");
 const Solution = aoc.Solution;
 
 pub fn solve() !void {
-    var timer = try std.time.Timer.start();
-
-    const input = @embedFile("../inputs//day01.txt");
-    const solution = try secretEntrance(input);
-    std.debug.print("Part 1 Answer: {d}\n", .{solution.part1});
-    std.debug.print("Part 2 Answer: {d}\n", .{solution.part2});
-
-    const elapsed = timer.read();
-    std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
+    const input = @embedFile("../inputs/day01.txt");
+    try aoc.runSolution("Day 01", input, secretEntrance, .{});
 }
 
-fn secretEntrance(input: []const u8) !Solution {
+fn secretEntrance(allocator: std.mem.Allocator, input: []const u8) !Solution {
+    _ = allocator;
     const LOCK_MODULO: isize = 100;
     var lock_value: isize = 50;
     var part1: usize = 0;

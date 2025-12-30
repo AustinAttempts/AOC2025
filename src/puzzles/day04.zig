@@ -31,19 +31,8 @@ const DIRECTIONS = [8][2]i32{
 };
 
 pub fn solve() !void {
-    var timer = try std.time.Timer.start();
-
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    const input = @embedFile("../inputs/day04.txt");
-    const solution = try printingDepartment(allocator, input);
-    std.debug.print("Part 1 Answer: {d}\n", .{solution.part1});
-    std.debug.print("Part 2 Answer: {d}\n", .{solution.part2});
-
-    const elapsed = timer.read();
-    std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
+    const input = @embedFile("../inputs/day03.txt");
+    try aoc.runSolution("Day 03", input, printingDepartment, .{});
 }
 
 fn printingDepartment(allocator: std.mem.Allocator, input: []const u8) !Solution {
