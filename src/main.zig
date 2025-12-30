@@ -7,4 +7,5 @@ pub fn main() !void {
     try AOC2025.day01.solve();
     try AOC2025.day02.solve();
     try AOC2025.day03.solve();
+    try AOC2025.day04.solve();
 }
