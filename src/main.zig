@@ -6,4 +6,5 @@ pub fn main() !void {
     std.debug.print("Advent of Code 2025:\n", .{});
     try AOC2025.day01.solve();
     try AOC2025.day02.solve();
+    try AOC2025.day03.solve();
 }
