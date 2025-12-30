@@ -1,13 +1,11 @@
 const std = @import("std");
+const aoc = @import("../root.zig");
 
-const Solution = struct {
-    part1: usize,
-    part2: usize,
-};
+const Solution = aoc.Solution;
 
-pub fn main() !void {
+pub fn solve() !void {
     var timer = try std.time.Timer.start();
-    const input = @embedFile("inputs/day02.txt");
+    const input = @embedFile("../inputs/day02.txt");
     const solution = try giftShop(input);
 
     std.debug.print("Part 1 Answer: {d}\n", .{solution.part1});
@@ -95,8 +93,7 @@ test "Part 1 bad ID detection" {
 }
 
 test "part 1" {
-    const input = @embedFile("inputs/test_case.txt");
-
+    const input = @embedFile("../inputs/tests/day02_test_case.txt");
     try std.testing.expectEqual(1227775554, (try giftShop(input)).part1);
 }
 
@@ -114,6 +111,6 @@ test "Part 2 bad ID detection" {
 }
 
 test "part 2" {
-    const input = @embedFile("inputs/test_case.txt");
+    const input = @embedFile("../inputs/tests/day02_test_case.txt");
     try std.testing.expectEqual(4174379265, (try giftShop(input)).part2);
 }

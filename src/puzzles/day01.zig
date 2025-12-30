@@ -1,9 +1,7 @@
 const std = @import("std");
+const aoc = @import("../root.zig");
 
-const Solution = struct {
-    part1: usize,
-    part2: usize,
-};
+const Solution = aoc.Solution;
 
 pub fn solve() !void {
     var timer = try std.time.Timer.start();
