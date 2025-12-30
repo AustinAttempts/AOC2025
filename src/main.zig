@@ -12,5 +12,8 @@ pub fn main() !void {
     try AOC2025.day06.solve();
     try AOC2025.day07.solve();
     try AOC2025.day08.solve();
-    try AOC2025.day09.solve();
+    // try AOC2025.day09.solve();
+    try AOC2025.day10.solve();
+    try AOC2025.day11.solve();
+    try AOC2025.day12.solve();
 }

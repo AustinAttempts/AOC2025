@@ -1,4 +1,7 @@
 const std = @import("std");
+const aoc = @import("../root.zig");
+
+const Solution = aoc.Solution;
 
 const State = enum {
     PresentKey,
@@ -61,21 +64,21 @@ const Region = struct {
     }
 };
 
-pub fn main() !void {
+pub fn solve() !void {
     var timer = try std.time.Timer.start();
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const input = @embedFile("inputs/day12.txt");
-    std.debug.print("Part 1 Answer: {d}\n", .{try part1(allocator, input)});
+    const input = @embedFile("../inputs/day12.txt");
+    std.debug.print("Part 1 Answer: {d}\n", .{(try christmasTreeFarm(allocator, input)).part1});
 
     const elapsed = timer.read();
     std.debug.print("Run Time: {d:.2}ms\n", .{@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_ms});
 }
 
-fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
+fn christmasTreeFarm(allocator: std.mem.Allocator, input: []const u8) !Solution {
     var presents = std.AutoHashMap(usize, Present).init(allocator);
     defer {
         var iter = presents.valueIterator();
@@ -131,14 +134,14 @@ fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
         prev_state = curr_state;
     }
 
-    var iter = presents.valueIterator();
-    while (iter.next()) |present| {
-        present.print();
-    }
+    // var iter = presents.valueIterator();
+    // while (iter.next()) |present| {
+    //     present.print();
+    // }
 
-    for (regions.items) |region| {
-        region.print();
-    }
+    // for (regions.items) |region| {
+    //     region.print();
+    // }
 
     var valid_regions: usize = 0;
     for (regions.items) |region| {
@@ -147,21 +150,21 @@ fn part1(allocator: std.mem.Allocator, input: []const u8) !usize {
         for (region.present_qty, 0..) |cnt, i| {
             presents_area += (presents.get(i).?.area) * cnt;
         }
-        std.debug.print("Region has area {d} & presents take up area {d}\n", .{ max_area, presents_area });
+        // std.debug.print("Region has area {d} & presents take up area {d}\n", .{ max_area, presents_area });
         if (max_area > presents_area) {
             valid_regions += 1;
         }
     }
 
-    return valid_regions;
+    return .{ .part1 = valid_regions, .part2 = 0 };
 }
 
 test "part 1" {
-    const input = @embedFile("inputs/test_case.txt");
+    const input = @embedFile("../inputs/tests/day12_test_case.txt");
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
     std.debug.print("\nRunning part 1 test...\n", .{});
-    try std.testing.expectEqual(2, try part1(allocator, input));
+    try std.testing.expectEqual(2, (try christmasTreeFarm(allocator, input)).part1);
 }

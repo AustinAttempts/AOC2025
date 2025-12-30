@@ -1,9 +1,7 @@
 const std = @import("std");
+const aoc = @import("../root.zig");
 
-const Solution = struct {
-    part1: usize,
-    part2: usize,
-};
+const Solution = aoc.Solution;
 
 const Rational = struct {
     num: i64,
@@ -270,14 +268,14 @@ const Machine = struct {
     }
 };
 
-pub fn main() !void {
+pub fn solve() !void {
     var timer = try std.time.Timer.start();
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const input = @embedFile("inputs/day10.txt");
+    const input = @embedFile("../inputs/day10.txt");
     const solution = try factory(allocator, input);
 
     std.debug.print("Part 1 Answer: {d}\n", .{solution.part1});
@@ -396,7 +394,7 @@ fn searchFreeVariables(
 }
 
 test "part 1" {
-    const input = @embedFile("inputs/test_case.txt");
+    const input = @embedFile("../inputs/tests/day10_test_case.txt");
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -405,7 +403,7 @@ test "part 1" {
 }
 
 test "part 2" {
-    const input = @embedFile("inputs/test_case.txt");
+    const input = @embedFile("../inputs/tests/day10_test_case.txt");
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
