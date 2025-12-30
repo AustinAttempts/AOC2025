@@ -88,7 +88,10 @@ test "Part 1 bad ID detection" {
 
 test "part 1" {
     const input = @embedFile("../inputs/tests/day02_test_case.txt");
-    try std.testing.expectEqual(1227775554, (try giftShop(input)).part1);
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    try std.testing.expectEqual(1227775554, (try giftShop(allocator, input)).part1);
 }
 
 test "Part 2 bad ID detection" {
@@ -106,5 +109,8 @@ test "Part 2 bad ID detection" {
 
 test "part 2" {
     const input = @embedFile("../inputs/tests/day02_test_case.txt");
-    try std.testing.expectEqual(4174379265, (try giftShop(input)).part2);
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    try std.testing.expectEqual(4174379265, (try giftShop(allocator, input)).part2);
 }

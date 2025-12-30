@@ -38,12 +38,18 @@ fn secretEntrance(allocator: std.mem.Allocator, input: []const u8) !Solution {
 
 test "part 1" {
     const input = @embedFile("../inputs/tests/day01_test_case.txt");
-    const part1 = (try secretEntrance(input)).part1;
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    const part1 = (try secretEntrance(allocator, input)).part1;
     try std.testing.expectEqual(3, part1);
 }
 
 test "part 2" {
     const input = @embedFile("../inputs/tests/day01_test_case.txt");
-    const part2 = (try secretEntrance(input)).part2;
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
+    const part2 = (try secretEntrance(allocator, input)).part2;
     try std.testing.expectEqual(6, part2);
 }
